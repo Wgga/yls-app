@@ -202,7 +202,6 @@ struct MenuActionButton: View {
     let title: String
     let subtitle: String?
     let systemImage: String
-    let shortcut: String?
     let prominent: Bool
     let action: (() -> Void)?
     let useInfoCardBackground: Bool
@@ -214,7 +213,6 @@ struct MenuActionButton: View {
         title: String,
         subtitle: String?,
         systemImage: String,
-        shortcut: String?,
         prominent: Bool,
         action: (() -> Void)?,
         useInfoCardBackground: Bool = false
@@ -222,7 +220,6 @@ struct MenuActionButton: View {
         self.title = title
         self.subtitle = subtitle
         self.systemImage = systemImage
-        self.shortcut = shortcut
         self.prominent = prominent
         self.action = action
         self.useInfoCardBackground = useInfoCardBackground
@@ -275,14 +272,6 @@ struct MenuActionButton: View {
                         }
                     }
                     .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-
-                    Spacer(minLength: 8)
-
-                    if let shortcut {
-                        Text(shortcut)
-                            .font(.system(size: 10.5, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.secondary)
-                    }
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 10)
@@ -1583,7 +1572,6 @@ struct LiquidGlassSummaryPanel: View {
                 title: "统计模式",
                 subtitle: model.statisticsModeText,
                 systemImage: "square.split.2x1",
-                shortcut: nil,
                 prominent: false,
                 action: onSelectStatisticsMode,
                 useInfoCardBackground: true
@@ -1593,7 +1581,6 @@ struct LiquidGlassSummaryPanel: View {
                 title: "单显套餐源",
                 subtitle: model.currentSourceTitle,
                 systemImage: "square.stack.3d.up",
-                shortcut: nil,
                 prominent: false,
                 action: onSelectSource,
                 useInfoCardBackground: true
@@ -1605,7 +1592,6 @@ struct LiquidGlassSummaryPanel: View {
                     ? (model.launchAtLoginEnabled ? "已开启" : "已关闭")
                     : "仅支持 macOS 13+",
                 systemImage: model.launchAtLoginEnabled ? "power.circle.fill" : "power.circle",
-                shortcut: nil,
                 prominent: false,
                 action: model.launchAtLoginSupported
                     ? { onToggleLaunchAtLogin?(!model.launchAtLoginEnabled) }
@@ -1619,7 +1605,6 @@ struct LiquidGlassSummaryPanel: View {
                 title: PackageSource.codex.keyButtonTitle,
                 subtitle: model.codexAPIKeyStatusText,
                 systemImage: "key.horizontal",
-                shortcut: "⌘K",
                 prominent: false,
                 action: onSetAPIKey,
                 useInfoCardBackground: true
@@ -1629,7 +1614,6 @@ struct LiquidGlassSummaryPanel: View {
                 title: PackageSource.agi.keyButtonTitle,
                 subtitle: model.agiAPIKeyStatusText,
                 systemImage: "key.horizontal",
-                shortcut: nil,
                 prominent: false,
                 action: onSetAGIKey,
                 useInfoCardBackground: true
@@ -1639,7 +1623,6 @@ struct LiquidGlassSummaryPanel: View {
                 title: "轮询间隔",
                 subtitle: model.pollIntervalText,
                 systemImage: "timer",
-                shortcut: "⌘I",
                 prominent: false,
                 action: onSetInterval,
                 useInfoCardBackground: true
@@ -1649,7 +1632,6 @@ struct LiquidGlassSummaryPanel: View {
                 title: "MCP 服务",
                 subtitle: model.mcpStatusText,
                 systemImage: "server.rack",
-                shortcut: nil,
                 prominent: false,
                 action: onConfigureMCP,
                 useInfoCardBackground: true
@@ -1659,7 +1641,6 @@ struct LiquidGlassSummaryPanel: View {
                 title: "立即刷新",
                 subtitle: nil,
                 systemImage: "arrow.clockwise",
-                shortcut: "⌘R",
                 prominent: true,
                 action: onRefresh,
                 useInfoCardBackground: true
@@ -1670,7 +1651,6 @@ struct LiquidGlassSummaryPanel: View {
                     title: model.dashboardActionTitle,
                     subtitle: nil,
                     systemImage: "safari",
-                    shortcut: "⌘D",
                     prominent: false,
                     action: onOpenDashboard,
                     useInfoCardBackground: true
@@ -1681,7 +1661,6 @@ struct LiquidGlassSummaryPanel: View {
                 title: "退出",
                 subtitle: nil,
                 systemImage: "power",
-                shortcut: "⌘Q",
                 prominent: false,
                 action: onQuit,
                 useInfoCardBackground: true
@@ -1733,7 +1712,6 @@ struct LiquidGlassSummaryPanel: View {
                         title: "文本颜色",
                         subtitle: model.statusBarColorText,
                         systemImage: "paintpalette",
-                        shortcut: nil,
                         prominent: false,
                         action: onConfigureStatusColor,
                         useInfoCardBackground: true
@@ -2138,9 +2116,6 @@ struct MonitorDashboardShellView: View {
     }
 
     private var brandLogo: Image {
-        let sourceRoot = URL(fileURLWithPath: #filePath)
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
         let executableDirectory = Bundle.main.bundleURL.deletingLastPathComponent()
         let candidates: [URL?] = [
             Bundle.main.url(forResource: "yls_logo", withExtension: "png"),
@@ -2151,9 +2126,6 @@ struct MonitorDashboardShellView: View {
             executableDirectory
                 .appendingPathComponent("yls-app_yls-app.bundle")
                 .appendingPathComponent("Contents")
-                .appendingPathComponent("Resources")
-                .appendingPathComponent("yls_logo.png"),
-            sourceRoot
                 .appendingPathComponent("Resources")
                 .appendingPathComponent("yls_logo.png"),
         ] + Bundle.allBundles.map {
@@ -2758,7 +2730,6 @@ struct MonitorDashboardShellView: View {
                 title: "统计模式",
                 subtitle: model.statisticsModeText,
                 systemImage: "square.split.2x1",
-                shortcut: nil,
                 prominent: false,
                 action: onSelectStatisticsMode,
                 useInfoCardBackground: true
@@ -2768,7 +2739,6 @@ struct MonitorDashboardShellView: View {
                 title: "单显套餐源",
                 subtitle: model.currentSourceTitle,
                 systemImage: "square.stack.3d.up",
-                shortcut: nil,
                 prominent: false,
                 action: onSelectSource,
                 useInfoCardBackground: true
@@ -2780,7 +2750,6 @@ struct MonitorDashboardShellView: View {
                     ? (model.launchAtLoginEnabled ? "已开启" : "已关闭")
                     : "仅支持 macOS 13+",
                 systemImage: model.launchAtLoginEnabled ? "power.circle.fill" : "power.circle",
-                shortcut: nil,
                 prominent: false,
                 action: model.launchAtLoginSupported
                     ? { onToggleLaunchAtLogin?(!model.launchAtLoginEnabled) }
@@ -2794,7 +2763,6 @@ struct MonitorDashboardShellView: View {
                 title: PackageSource.codex.keyButtonTitle,
                 subtitle: model.codexAPIKeyStatusText,
                 systemImage: "key.horizontal",
-                shortcut: "⌘K",
                 prominent: false,
                 action: onSetAPIKey,
                 useInfoCardBackground: true
@@ -2804,7 +2772,6 @@ struct MonitorDashboardShellView: View {
                 title: PackageSource.agi.keyButtonTitle,
                 subtitle: model.agiAPIKeyStatusText,
                 systemImage: "key.horizontal",
-                shortcut: nil,
                 prominent: false,
                 action: onSetAGIKey,
                 useInfoCardBackground: true
@@ -2814,7 +2781,6 @@ struct MonitorDashboardShellView: View {
                 title: "轮询间隔",
                 subtitle: model.pollIntervalText,
                 systemImage: "timer",
-                shortcut: "⌘I",
                 prominent: false,
                 action: onSetInterval,
                 useInfoCardBackground: true
@@ -2824,7 +2790,6 @@ struct MonitorDashboardShellView: View {
                 title: "MCP 服务",
                 subtitle: model.mcpStatusText,
                 systemImage: "server.rack",
-                shortcut: nil,
                 prominent: false,
                 action: onConfigureMCP,
                 useInfoCardBackground: true
@@ -2834,7 +2799,6 @@ struct MonitorDashboardShellView: View {
                 title: "立即刷新",
                 subtitle: nil,
                 systemImage: "arrow.clockwise",
-                shortcut: "⌘R",
                 prominent: true,
                 action: onRefresh,
                 useInfoCardBackground: true
@@ -2845,7 +2809,6 @@ struct MonitorDashboardShellView: View {
                     title: model.dashboardActionTitle,
                     subtitle: nil,
                     systemImage: "safari",
-                    shortcut: "⌘D",
                     prominent: false,
                     action: onOpenDashboard,
                     useInfoCardBackground: true
@@ -2856,7 +2819,6 @@ struct MonitorDashboardShellView: View {
                 title: "退出",
                 subtitle: nil,
                 systemImage: "power",
-                shortcut: "⌘Q",
                 prominent: false,
                 action: onQuit,
                 useInfoCardBackground: true
@@ -2913,7 +2875,6 @@ struct MonitorDashboardShellView: View {
                     title: "文本颜色",
                     subtitle: model.statusBarColorText,
                     systemImage: "paintpalette",
-                    shortcut: nil,
                     prominent: false,
                     action: onConfigureStatusColor,
                     useInfoCardBackground: true

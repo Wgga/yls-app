@@ -5,7 +5,7 @@
 ## 应用展示
 
 <p align="center">
-  <img src="images/yls_logo.png" alt="伊莉思监控助手 Logo" width="120" />
+  <img src="images/yls_logo_1024.png" alt="伊莉思监控助手 Logo" width="120" />
 </p>
 
 <p align="center">
@@ -253,7 +253,7 @@ dist/伊莉思监控助手.dmg
 1. `swift build -c release`
 2. 生成 `.app` 目录结构
 3. 生成 `Info.plist`
-4. 从 `images/yls_logo.png` 生成 `.icns`
+4. 从 `images/yls_logo_1024.png` 生成应用 `.icns`，并用 `images/yls_logo.png` 作为 DMG 安装界面展示图标的小尺寸档
 5. 执行 ad-hoc codesign
 6. 生成带背景图的 DMG
 

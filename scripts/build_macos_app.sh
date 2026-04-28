@@ -7,7 +7,7 @@ EXECUTABLE_NAME="${EXECUTABLE_NAME:-yls-app}"
 BUNDLE_ID="${BUNDLE_ID:-com.yls.codex-monitor}"
 APP_VERSION="${APP_VERSION:-0.1.0}"
 APP_BUILD="${APP_BUILD:-1}"
-ICON_SOURCE_REL="${ICON_SOURCE_REL:-images/yls_logo.png}"
+ICON_SOURCE_REL="${ICON_SOURCE_REL:-images/yls_logo_1024.png}"
 DMG_BACKGROUND_REL="${DMG_BACKGROUND_REL:-images/yls_background.png}"
 BUILD_ARCHS="${BUILD_ARCHS:-arm64 x86_64}"
 DMG_ICON_SIZE="${DMG_ICON_SIZE:-96}"
@@ -26,6 +26,7 @@ APP_RESOURCES="$APP_CONTENTS/Resources"
 PLIST_PATH="$APP_CONTENTS/Info.plist"
 ICON_SOURCE="$ROOT_DIR/$ICON_SOURCE_REL"
 DMG_BACKGROUND="$ROOT_DIR/$DMG_BACKGROUND_REL"
+APP_LOGO_SOURCE="$ROOT_DIR/Sources/yls-app/Resources/yls_logo.png"
 ICONSET_DIR="$DIST_DIR/AppIcon.iconset"
 ICNS_PATH="$APP_RESOURCES/AppIcon.icns"
 DMG_PATH="$DIST_DIR/${APP_BUNDLE_NAME}.dmg"
@@ -88,6 +89,11 @@ if [[ ! -f "$DMG_BACKGROUND" ]]; then
   exit 1
 fi
 
+if [[ ! -f "$APP_LOGO_SOURCE" ]]; then
+  echo "App logo resource not found: $APP_LOGO_SOURCE" >&2
+  exit 1
+fi
+
 DMG_BACKGROUND_WIDTH="$(sips -g pixelWidth "$DMG_BACKGROUND" 2>/dev/null | awk '/pixelWidth/ {print $2}')"
 DMG_BACKGROUND_HEIGHT="$(sips -g pixelHeight "$DMG_BACKGROUND" 2>/dev/null | awk '/pixelHeight/ {print $2}')"
 DMG_WINDOW_WIDTH="${DMG_WINDOW_WIDTH:-$DMG_BACKGROUND_WIDTH}"
@@ -119,6 +125,8 @@ sips -s format png -z 512 512 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512.pn
 sips -s format png -z 1024 1024 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512@2x.png" >/dev/null
 iconutil -c icns "$ICONSET_DIR" -o "$ICNS_PATH"
 rm -rf "$ICONSET_DIR"
+
+cp "$APP_LOGO_SOURCE" "$APP_RESOURCES/yls_logo.png"
 
 cat > "$PLIST_PATH" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
