@@ -1,0 +1,57 @@
+name: Release macOS
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version without the leading v, for example 0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify Swift toolchain
+        run: |
+          swift --version
+          xcode-select -p
+
+      - name: Build DMG
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          chmod +x scripts/build_macos_app.sh
+
+          if [ -n "$INPUT_VERSION" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="${GITHUB_REF_NAME#v}"
+          fi
+
+          APP_VERSION="$VERSION" \
+          APP_BUILD="${GITHUB_RUN_NUMBER}" \
+          BUILD_ARCHS="arm64 x86_64" \
+          scripts/build_macos_app.sh
+
+      - name: Upload DMG artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-dmg
+          path: dist/*.dmg
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', inputs.version) || github.ref_name }}
+          files: dist/*.dmg
