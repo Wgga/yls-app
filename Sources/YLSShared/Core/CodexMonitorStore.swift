@@ -1,60 +1,58 @@
-import AppKit
 import Foundation
 
 @MainActor
-final class CodexMonitorStore {
-    var onStateChange: (() -> Void)?
+public final class CodexMonitorStore {
+    public var onStateChange: (() -> Void)?
 
     private let defaults: UserDefaults
     private let networkService: CodexMonitorNetworkServing
 
-    private(set) var apiKey: String = ""
-    private(set) var agiAPIKey: String = ""
-    private(set) var currentSource: PackageSource = .codex
-    private(set) var statisticsDisplayMode: StatisticsDisplayMode = .single
-    private(set) var pollInterval: TimeInterval = 5
-    private(set) var displayStyle: StatusDisplayStyle = .dailyRemainingAmount
-    private(set) var statusBarForegroundMode: StatusBarForegroundMode = .autoAdapt
-    private(set) var statusBarManualColorHex = AppMeta.defaultStatusBarColorHex
-    private(set) var statusBarManualColor = NSColor.white
-    private(set) var panelMode: MenuPanelMode = .statistics
-    private(set) var statusFallbackText = "余额: --"
-    private(set) var mcpEnabled = true
-    private(set) var mcpPort: UInt16 = AppMeta.defaultMCPPort
-    private(set) var launchAtLoginEnabled = true
-    private(set) var sourceGroupExpanded: [PackageSource: Bool] = [
+    public private(set) var apiKey: String = ""
+    public private(set) var agiAPIKey: String = ""
+    public private(set) var currentSource: PackageSource = .codex
+    public private(set) var statisticsDisplayMode: StatisticsDisplayMode = .single
+    public private(set) var pollInterval: TimeInterval = 5
+    public private(set) var displayStyle: StatusDisplayStyle = .dailyRemainingAmount
+    public private(set) var statusBarForegroundMode: StatusBarForegroundMode = .autoAdapt
+    public private(set) var statusBarManualColorHex = AppMeta.defaultStatusBarColorHex
+    public private(set) var panelMode: MenuPanelMode = .statistics
+    public private(set) var statusFallbackText = "余额: --"
+    public private(set) var mcpEnabled = true
+    public private(set) var mcpPort: UInt16 = AppMeta.defaultMCPPort
+    public private(set) var launchAtLoginEnabled = true
+    public private(set) var sourceGroupExpanded: [PackageSource: Bool] = [
         .codex: true,
         .agi: true,
     ]
 
-    private(set) var latestUsage = "--"
-    private(set) var latestRemaining = "--"
-    private(set) var latestDailyRemaining = "--"
-    private(set) var latestWeeklyRemaining = "--"
-    private(set) var latestRenewal = "--"
-    private(set) var latestMessage = "等待数据"
-    private(set) var latestUsageLabel = "已用/总"
-    private(set) var latestProgressLabel = "用量进度"
-    private(set) var latestProgressPrefix: String?
-    private(set) var latestEmail: String?
-    private(set) var latestPackageItems: [SummaryPackageItem] = []
-    private(set) var latestUsedPercent: Double?
-    private(set) var usageLogsPage: Int = 1
-    private(set) var usageLogsPageSize: Int = 20
-    private(set) var usageLogsPanel: CodexUsageRecordsPanelViewModel = .empty
+    public private(set) var latestUsage = "--"
+    public private(set) var latestRemaining = "--"
+    public private(set) var latestDailyRemaining = "--"
+    public private(set) var latestWeeklyRemaining = "--"
+    public private(set) var latestRenewal = "--"
+    public private(set) var latestMessage = "等待数据"
+    public private(set) var latestUsageLabel = "已用/总"
+    public private(set) var latestProgressLabel = "用量进度"
+    public private(set) var latestProgressPrefix: String?
+    public private(set) var latestEmail: String?
+    public private(set) var latestPackageItems: [SummaryPackageItem] = []
+    public private(set) var latestUsedPercent: Double?
+    public private(set) var usageLogsPage: Int = 1
+    public private(set) var usageLogsPageSize: Int = 20
+    public private(set) var usageLogsPanel: CodexUsageRecordsPanelViewModel = .empty
 
-    private(set) var agiLatestUsage = "--"
-    private(set) var agiLatestRemaining = "--"
-    private(set) var agiLatestRenewal = "--"
-    private(set) var agiLatestMessage = ""
-    private(set) var agiLatestPackageItems: [SummaryPackageItem] = []
-    private(set) var agiLatestUsedPercent: Double?
+    public private(set) var agiLatestUsage = "--"
+    public private(set) var agiLatestRemaining = "--"
+    public private(set) var agiLatestRenewal = "--"
+    public private(set) var agiLatestMessage = ""
+    public private(set) var agiLatestPackageItems: [SummaryPackageItem] = []
+    public private(set) var agiLatestUsedPercent: Double?
 
-    private(set) var isEmailVisible = false
+    public private(set) var isEmailVisible = false
 
     private var sourceStates: [PackageSource: SourceMonitorState] = [:]
 
-    init(
+    public init(
         defaults: UserDefaults = .standard,
         networkService: CodexMonitorNetworkServing = CodexMonitorNetworkService()
     ) {
@@ -62,7 +60,7 @@ final class CodexMonitorStore {
         self.networkService = networkService
     }
 
-    func loadConfiguration() {
+    public func loadConfiguration() {
         apiKey = defaults.string(forKey: DefaultsKey.codexAPIKey)
             ?? defaults.string(forKey: DefaultsKey.apiKey)
             ?? ""
@@ -96,12 +94,10 @@ final class CodexMonitorStore {
         }
 
         if let colorHex = defaults.string(forKey: DefaultsKey.statusBarColorHex),
-           let parsedColor = Self.colorFromHex(colorHex)
+           let normalizedColorHex = Self.normalizedColorHex(colorHex)
         {
-            statusBarManualColor = parsedColor
-            statusBarManualColorHex = Self.hexString(from: parsedColor)
+            statusBarManualColorHex = normalizedColorHex
         } else {
-            statusBarManualColor = .white
             statusBarManualColorHex = AppMeta.defaultStatusBarColorHex
         }
 
@@ -123,17 +119,17 @@ final class CodexMonitorStore {
         syncLatestFieldsFromActiveSource()
     }
 
-    func initializeStatusFallback() {
+    public func initializeStatusFallback() {
         rebuildSourceStates()
         syncLatestFieldsFromActiveSource()
         notifyStateChanged()
     }
 
-    func setAPIKey(_ value: String) {
+    public func setAPIKey(_ value: String) {
         setAPIKey(value, for: .codex)
     }
 
-    func setAPIKey(_ value: String, for source: PackageSource) {
+    public func setAPIKey(_ value: String, for source: PackageSource) {
         let normalized = Self.normalizeAPIKey(value)
         switch source {
         case .codex:
@@ -149,12 +145,12 @@ final class CodexMonitorStore {
         refreshNow()
     }
 
-    func setAGIKey(_ value: String) {
+    public func setAGIKey(_ value: String) {
         setAPIKey(value, for: .agi)
     }
 
     @discardableResult
-    func setPollInterval(_ value: Double) -> Bool {
+    public func setPollInterval(_ value: Double) -> Bool {
         guard value >= 1 else {
             return false
         }
@@ -165,13 +161,13 @@ final class CodexMonitorStore {
         return true
     }
 
-    func selectDisplayStyle(_ style: StatusDisplayStyle) {
+    public func selectDisplayStyle(_ style: StatusDisplayStyle) {
         displayStyle = style
         persistConfiguration()
         notifyStateChanged()
     }
 
-    func selectStatisticsDisplayMode(_ mode: StatisticsDisplayMode) {
+    public func selectStatisticsDisplayMode(_ mode: StatisticsDisplayMode) {
         statisticsDisplayMode = mode
         persistConfiguration()
         syncLatestFieldsFromActiveSource()
@@ -179,7 +175,7 @@ final class CodexMonitorStore {
         refreshNow()
     }
 
-    func selectSource(_ source: PackageSource) {
+    public func selectSource(_ source: PackageSource) {
         currentSource = source
         isEmailVisible = false
         persistConfiguration()
@@ -188,50 +184,49 @@ final class CodexMonitorStore {
         refreshNow()
     }
 
-    func toggleSourceGroup(_ source: PackageSource) {
+    public func toggleSourceGroup(_ source: PackageSource) {
         sourceGroupExpanded[source] = !(sourceGroupExpanded[source] ?? true)
         notifyStateChanged()
     }
 
-    func togglePanelMode() {
+    public func togglePanelMode() {
         panelMode = panelMode == .statistics ? .settings : .statistics
         notifyStateChanged()
     }
 
-    func toggleEmailVisibility() {
+    public func toggleEmailVisibility() {
         guard state(for: currentSource).email?.isEmpty == false else { return }
         isEmailVisible.toggle()
         notifyStateChanged()
     }
 
-    func hideEmail() {
+    public func hideEmail() {
         guard isEmailVisible else { return }
         isEmailVisible = false
         notifyStateChanged()
     }
 
-    func setMCPConfiguration(enabled: Bool, port: UInt16) {
+    public func setMCPConfiguration(enabled: Bool, port: UInt16) {
         mcpEnabled = enabled
         mcpPort = port
         persistConfiguration()
         notifyStateChanged()
     }
 
-    func setLaunchAtLoginEnabled(_ enabled: Bool) {
+    public func setLaunchAtLoginEnabled(_ enabled: Bool) {
         launchAtLoginEnabled = enabled
         persistConfiguration()
         notifyStateChanged()
     }
 
-    func setStatusBarColor(mode: StatusBarForegroundMode, color: NSColor) {
+    public func setStatusBarColor(mode: StatusBarForegroundMode, colorHex: String) {
         statusBarForegroundMode = mode
-        statusBarManualColor = color
-        statusBarManualColorHex = Self.hexString(from: color)
+        statusBarManualColorHex = Self.normalizedColorHex(colorHex) ?? AppMeta.defaultStatusBarColorHex
         persistConfiguration()
         notifyStateChanged()
     }
 
-    func refreshNow() {
+    public func refreshNow() {
         Task { @MainActor in
             async let codexRefresh: Void = refreshCodexNow()
             async let agiRefresh: Void = refreshAGINow()
@@ -240,7 +235,7 @@ final class CodexMonitorStore {
         }
     }
 
-    func selectUsageLogsPage(_ page: Int) {
+    public func selectUsageLogsPage(_ page: Int) {
         let normalized = max(1, page)
         guard normalized != usageLogsPage else { return }
         usageLogsPage = normalized
@@ -250,7 +245,7 @@ final class CodexMonitorStore {
         }
     }
 
-    func makeSummaryModel(
+    public func makeSummaryModel(
         supportsLaunchAtLogin: Bool,
         launchAtLoginUnavailableReason: String?,
         mcpStatusText: String
@@ -366,7 +361,7 @@ final class CodexMonitorStore {
         )
     }
 
-    func makeMCPSnapshotData(mcpStatusText: String) -> Data {
+    public func makeMCPSnapshotData(mcpStatusText: String) -> Data {
         let activeState = state(for: currentSource)
         let snapshot = MCPServerSnapshot(
             generatedAt: ISO8601DateFormatter().string(from: Date()),
@@ -775,7 +770,7 @@ final class CodexMonitorStore {
         notifyStateChanged()
     }
 
-    func statusBarSnapshot() -> (
+    public func statusBarSnapshot() -> (
         dailyUsedAmount: String,
         dailyRemainingAmount: String,
         weeklyUsedAmount: String,
@@ -945,7 +940,7 @@ final class CodexMonitorStore {
         onStateChange?()
     }
 
-    private static func colorFromHex(_ rawValue: String) -> NSColor? {
+    private static func normalizedColorHex(_ rawValue: String) -> String? {
         let cleaned = rawValue
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .replacingOccurrences(of: "#", with: "")
@@ -953,19 +948,7 @@ final class CodexMonitorStore {
         guard cleaned.count == 6, let packed = UInt32(cleaned, radix: 16) else {
             return nil
         }
-
-        let red = CGFloat((packed >> 16) & 0xFF) / 255
-        let green = CGFloat((packed >> 8) & 0xFF) / 255
-        let blue = CGFloat(packed & 0xFF) / 255
-        return NSColor(srgbRed: red, green: green, blue: blue, alpha: 1)
-    }
-
-    private static func hexString(from color: NSColor) -> String {
-        let converted = color.usingColorSpace(.sRGB) ?? color.usingColorSpace(.deviceRGB) ?? .white
-        let red = Int(round(max(0, min(1, converted.redComponent)) * 255))
-        let green = Int(round(max(0, min(1, converted.greenComponent)) * 255))
-        let blue = Int(round(max(0, min(1, converted.blueComponent)) * 255))
-        return String(format: "#%02X%02X%02X", red, green, blue)
+        return String(format: "#%06X", packed)
     }
 
     nonisolated private static func normalizeAPIKey(_ rawValue: String) -> String {

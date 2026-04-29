@@ -1,78 +1,80 @@
 import Foundation
 import Network
 
-struct MCPServerSnapshot: Encodable {
-    let generatedAt: String
-    let displayName: String
-    let dashboardURL: String
-    let pricingURL: String
-    let currentSource: String
-    let statisticsDisplayMode: String
-    let statusText: String
-    let latestMessage: String
-    let remaining: String
-    let usage: String
-    let renewal: String
-    let progressLabel: String
-    let progressPrefix: String?
-    let usedPercent: Double?
-    let email: String?
-    let hasAPIKey: Bool
-    let hasAGIKey: Bool
-    let pollIntervalSeconds: Double
-    let displayStyle: String
-    let packageItems: [MCPPackageItem]
-    let sourceGroups: [MCPSourceGroup]
+public struct MCPServerSnapshot: Encodable, Sendable {
+    public let generatedAt: String
+    public let displayName: String
+    public let dashboardURL: String
+    public let pricingURL: String
+    public let currentSource: String
+    public let statisticsDisplayMode: String
+    public let statusText: String
+    public let latestMessage: String
+    public let remaining: String
+    public let usage: String
+    public let renewal: String
+    public let progressLabel: String
+    public let progressPrefix: String?
+    public let usedPercent: Double?
+    public let email: String?
+    public let hasAPIKey: Bool
+    public let hasAGIKey: Bool
+    public let pollIntervalSeconds: Double
+    public let displayStyle: String
+    public let packageItems: [MCPPackageItem]
+    public let sourceGroups: [MCPSourceGroup]
 }
 
-struct MCPPackageItem: Encodable {
-    let title: String
-    let subtitle: String
-    let badgeText: String
+public struct MCPPackageItem: Encodable, Sendable {
+    public let title: String
+    public let subtitle: String
+    public let badgeText: String
 }
 
-struct MCPSourceGroup: Encodable {
-    let source: String
-    let statusText: String
-    let remaining: String
-    let usage: String
-    let renewal: String
-    let progressValue: String
-    let progressFraction: Double?
-    let packageItems: [MCPPackageItem]
+public struct MCPSourceGroup: Encodable, Sendable {
+    public let source: String
+    public let statusText: String
+    public let remaining: String
+    public let usage: String
+    public let renewal: String
+    public let progressValue: String
+    public let progressFraction: Double?
+    public let packageItems: [MCPPackageItem]
 }
 
-final class MCPSnapshotStore: @unchecked Sendable {
+public final class MCPSnapshotStore: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.yls.codex-monitor.mcp-snapshot-store")
     private var data = Data("{}".utf8)
 
-    func get() -> Data {
+    public init() {}
+
+    public func get() -> Data {
         queue.sync { data }
     }
 
-    func set(_ newData: Data) {
+    public func set(_ newData: Data) {
         queue.sync {
             data = newData
         }
     }
 }
 
-final class MCPHTTPServer: @unchecked Sendable {
+public final class MCPHTTPServer: @unchecked Sendable {
     private let stateProvider: @Sendable () -> Data
     private let resourceURI = "yls://codex-monitor/snapshot"
     private let toolName = "get_codex_monitor_snapshot"
     private let queue = DispatchQueue(label: "com.yls.codex-monitor.mcp-server")
     private var listener: NWListener?
-    private(set) var port: UInt16
-    private(set) var isRunning = false
-    var lastError: String?
+    public private(set) var port: UInt16
+    public private(set) var isRunning = false
+    public var lastError: String?
 
-    init(port: UInt16, stateProvider: @escaping @Sendable () -> Data) {
+    public init(port: UInt16, stateProvider: @escaping @Sendable () -> Data) {
         self.port = port
         self.stateProvider = stateProvider
     }
 
-    func updatePort(_ newPort: UInt16) throws {
+    public func updatePort(_ newPort: UInt16) throws {
         if newPort == port {
             if !isRunning {
                 try start()
@@ -84,7 +86,7 @@ final class MCPHTTPServer: @unchecked Sendable {
         try start()
     }
 
-    func start() throws {
+    public func start() throws {
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
         let listener = try NWListener(using: params, on: NWEndpoint.Port(rawValue: port)!)
@@ -109,7 +111,7 @@ final class MCPHTTPServer: @unchecked Sendable {
         listener.start(queue: queue)
     }
 
-    func stop() {
+    public func stop() {
         listener?.cancel()
         listener = nil
         isRunning = false

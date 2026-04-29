@@ -1,6 +1,6 @@
 # 伊莉思监控助手
 
-原生 macOS 桌面应用，用于监控伊莉思 Codex / AGI 套餐额度、使用情况、使用记录和本地 MCP 快照数据。应用提供状态栏入口、桌面仪表盘、套餐源切换、主题换肤、状态栏样式配置和本地 HTTP MCP 服务，方便用户和 AI Agent 获取当前账户状态。
+原生 Apple 平台应用，用于监控伊莉思 Codex / AGI 套餐额度、使用情况、使用记录和本地 MCP 快照数据。macOS 版本提供状态栏入口、桌面仪表盘、套餐源切换、主题换肤、状态栏样式配置和本地 HTTP MCP 服务；iOS target 复用共享模型、Store 和网络层，提供移动端 SwiftUI 根页面。
 
 ## 应用展示
 
@@ -28,6 +28,7 @@
 ## 系统要求
 
 - macOS 13.0 或更高版本
+- iOS 16.0 或更高版本（`YLSiOSApp` target）
 - Xcode / Command Line Tools
 - Swift 6.1 或更高版本
 
@@ -44,13 +45,14 @@ xcode-select -p
 .
 ├── Package.swift
 ├── README.md
-├── Sources/yls-app
-│   ├── App/                  # AppDelegate、窗口、状态栏入口
-│   ├── Core/                 # 模型、状态管理、UserDefaults 配置
-│   ├── MCP/                  # 本地 MCP / HTTP 快照服务
-│   ├── Networking/           # Codex / AGI 网络请求
-│   ├── Resources/            # 应用资源
-│   └── UI/                   # SwiftUI 仪表盘和设置界面
+├── Sources
+│   ├── YLSShared             # 模型、Store、网络请求、MCP 快照数据
+│   ├── YLSSharedUI           # macOS / iOS 共用的 SwiftUI 仪表盘界面
+│   ├── YLSMacOSApp           # AppKit 状态栏、菜单、窗口和 macOS 入口
+│   └── YLSiOSApp             # iOS SwiftUI 根页面，原样复用 YLSSharedUI 桌面仪表盘
+├── iOS
+│   ├── YLSiOSHost.xcodeproj  # iOS 宿主工程，用于真机运行、Archive 和导出 IPA
+│   └── YLSiOSHost            # iOS App 入口与资源
 ├── images/                   # README 截图、Logo、DMG 背景
 └── scripts/
     └── build_macos_app.sh    # 本地 .app / .dmg 打包脚本
@@ -70,7 +72,7 @@ swift run yls-app
 
 1. 打开 Xcode。
 2. 选择 `File -> Open...`，打开项目根目录。
-3. 选择 `yls-app` 可执行目标。
+3. 选择 `yls-app` 可执行目标运行 macOS 版本；或打开 `iOS/YLSiOSHost.xcodeproj`，选择 `YLSiOSHost` 运行 iOS 版本。
 4. 点击 `Run`。
 
 ### 常用开发命令
@@ -81,6 +83,9 @@ swift build
 
 # Release 构建
 swift build -c release
+
+# 单独验证 iOS 共享入口 target
+swift build --target YLSiOSApp
 
 # 清理构建缓存
 swift package clean
@@ -270,14 +275,47 @@ BUILD_ARCHS="arm64" scripts/build_macos_app.sh
 BUILD_ARCHS="x86_64" scripts/build_macos_app.sh
 ```
 
+## iOS 打包
+
+iOS 宿主工程位于：
+
+```text
+iOS/YLSiOSHost.xcodeproj
+```
+
+模拟器验证：
+
+```bash
+xcodebuild \
+  -project iOS/YLSiOSHost.xcodeproj \
+  -scheme YLSiOSHost \
+  -destination "generic/platform=iOS Simulator" \
+  -configuration Debug \
+  CODE_SIGNING_ALLOWED=NO \
+  build
+```
+
+真机归档和导出 IPA 需要 Apple Developer Team ID：
+
+```bash
+IOS_DEVELOPMENT_TEAM="你的 Team ID" scripts/build_ios_app.sh
+```
+
+默认输出：
+
+```text
+dist/ios/YLSiOSHost.xcarchive
+dist/ios/export
+```
+
+也可以在 Xcode 中打开 `iOS/YLSiOSHost.xcodeproj`，选择 `YLSiOSHost` scheme，配置 Signing & Capabilities 后执行 `Product -> Archive`。
+
 常用可配置环境变量：
 
 ```bash
-APP_VERSION="0.2.0" \
-APP_BUILD="12" \
-BUNDLE_ID="com.yls.codex-monitor" \
-APP_DISPLAY_NAME="伊莉思监控助手" \
-scripts/build_macos_app.sh
+BUNDLE_ID="com.yls.codex-monitor.ios" \
+IOS_DEVELOPMENT_TEAM="你的 Team ID" \
+scripts/build_ios_app.sh
 ```
 
 ## 发布流程
@@ -328,7 +366,10 @@ CLANG_MODULE_CACHE_PATH=/tmp/yls-clang-cache swift build
 
 - UI 使用 SwiftUI 实现。
 - 状态栏、窗口和系统能力由 AppKit 管理。
-- 网络层集中在 `Sources/yls-app/Networking`。
-- 状态管理和数据转换集中在 `Sources/yls-app/Core`。
+- 网络层集中在 `Sources/YLSShared/Networking`。
+- 状态管理和数据转换集中在 `Sources/YLSShared/Core`。
+- 主仪表盘 UI 集中在 `Sources/YLSSharedUI`，macOS 窗口和 iOS 页面共用同一套视图。
+- macOS 状态栏、菜单、窗口和 AppKit 适配集中在 `Sources/YLSMacOSApp`。
+- iOS 页面入口集中在 `Sources/YLSiOSApp`，当前以桌面画布尺寸直接承载主仪表盘，可在手机上横向 / 纵向滚动查看完整 UI。
 - MCP 服务是本机 HTTP 服务，仅监听 `127.0.0.1`。
 - 不要将真实 API Key 提交到仓库。

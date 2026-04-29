@@ -1,55 +1,54 @@
-import AppKit
+import CoreGraphics
 import Foundation
-import SwiftUI
 
-enum DefaultsKey {
-    static let apiKey = "api_key"
-    static let codexAPIKey = "codex_api_key"
-    static let agiAPIKey = "agi_api_key"
-    static let selectedSource = "selected_source"
-    static let statisticsDisplayMode = "statistics_display_mode"
-    static let interval = "poll_interval_seconds"
-    static let displayStyle = "status_display_style"
-    static let statusBarColorAutoAdapt = "status_bar_color_auto_adapt"
-    static let statusBarColorHex = "status_bar_color_hex"
-    static let mcpEnabled = "mcp_enabled"
-    static let mcpPort = "mcp_port"
-    static let launchAtLoginEnabled = "launch_at_login_enabled"
+public enum DefaultsKey {
+    public static let apiKey = "api_key"
+    public static let codexAPIKey = "codex_api_key"
+    public static let agiAPIKey = "agi_api_key"
+    public static let selectedSource = "selected_source"
+    public static let statisticsDisplayMode = "statistics_display_mode"
+    public static let interval = "poll_interval_seconds"
+    public static let displayStyle = "status_display_style"
+    public static let statusBarColorAutoAdapt = "status_bar_color_auto_adapt"
+    public static let statusBarColorHex = "status_bar_color_hex"
+    public static let mcpEnabled = "mcp_enabled"
+    public static let mcpPort = "mcp_port"
+    public static let launchAtLoginEnabled = "launch_at_login_enabled"
 }
 
-enum AppMeta {
-    static let displayName = "伊莉思监控助手"
-    static let codexEndpoint = URL(string: "https://code.ylsagi.com/codex/info")!
-    static let codexLogsEndpoint = URL(string: "https://code.ylsagi.com/codex/logs")!
-    static let agiPackageEndpoint = URL(string: "https://api.ylsagi.com/user/package")!
-    static let agiEnvironmentKey = "YLS_AGI_KEY"
-    static let dashboardURL = "https://code.ylsagi.com/user/dashboard"
-    static let pricingURL = "https://code.ylsagi.com/pricing"
-    static let mcpHost = "127.0.0.1"
-    static let defaultMCPPort: UInt16 = 8765
-    static let stackedStatusMinWidth: CGFloat = 44
-    static let stackedStatusMaxWidth: CGFloat = 72
-    static let stackedHorizontalPadding: CGFloat = 4
-    static let stackedStatusHeight: CGFloat = 18
-    static let stackedLineGap: CGFloat = 1
-    static let stackedVerticalNudge: CGFloat = -0.5
-    static let stackedTopFontSize: CGFloat = 9.5
-    static let stackedBottomFontSize: CGFloat = 7.5
-    static let circleMinWidth: CGFloat = 44
-    static let circleMaxWidth: CGFloat = 76
-    static let circleHorizontalPadding: CGFloat = 4
-    static let circleBottomFontSize: CGFloat = 8
-    static let circleLineGap: CGFloat = 1
-    static let circleLineWidth: CGFloat = 1.8
-    static let circleDiameter: CGFloat = 13
-    static let defaultStatusBarColorHex = "#FFFFFF"
+public enum AppMeta {
+    public static let displayName = "伊莉思监控助手"
+    public static let codexEndpoint = URL(string: "https://code.ylsagi.com/codex/info")!
+    public static let codexLogsEndpoint = URL(string: "https://code.ylsagi.com/codex/logs")!
+    public static let agiPackageEndpoint = URL(string: "https://api.ylsagi.com/user/package")!
+    public static let agiEnvironmentKey = "YLS_AGI_KEY"
+    public static let dashboardURL = "https://code.ylsagi.com/user/dashboard"
+    public static let pricingURL = "https://code.ylsagi.com/pricing"
+    public static let mcpHost = "127.0.0.1"
+    public static let defaultMCPPort: UInt16 = 8765
+    public static let stackedStatusMinWidth: CGFloat = 44
+    public static let stackedStatusMaxWidth: CGFloat = 72
+    public static let stackedHorizontalPadding: CGFloat = 4
+    public static let stackedStatusHeight: CGFloat = 18
+    public static let stackedLineGap: CGFloat = 1
+    public static let stackedVerticalNudge: CGFloat = -0.5
+    public static let stackedTopFontSize: CGFloat = 9.5
+    public static let stackedBottomFontSize: CGFloat = 7.5
+    public static let circleMinWidth: CGFloat = 44
+    public static let circleMaxWidth: CGFloat = 76
+    public static let circleHorizontalPadding: CGFloat = 4
+    public static let circleBottomFontSize: CGFloat = 8
+    public static let circleLineGap: CGFloat = 1
+    public static let circleLineWidth: CGFloat = 1.8
+    public static let circleDiameter: CGFloat = 13
+    public static let defaultStatusBarColorHex = "#FFFFFF"
 }
 
-enum PackageSource: String, CaseIterable {
+public enum PackageSource: String, CaseIterable, Sendable {
     case codex
     case agi
 
-    var title: String {
+    public var title: String {
         switch self {
         case .codex:
             return "Codex 套餐"
@@ -58,7 +57,7 @@ enum PackageSource: String, CaseIterable {
         }
     }
 
-    var chipTitle: String {
+    public var chipTitle: String {
         switch self {
         case .codex:
             return "Codex"
@@ -67,7 +66,7 @@ enum PackageSource: String, CaseIterable {
         }
     }
 
-    var settingsTitle: String {
+    public var settingsTitle: String {
         switch self {
         case .codex:
             return "Codex"
@@ -76,7 +75,7 @@ enum PackageSource: String, CaseIterable {
         }
     }
 
-    var keyButtonTitle: String {
+    public var keyButtonTitle: String {
         switch self {
         case .codex:
             return "Codex API Key"
@@ -85,7 +84,7 @@ enum PackageSource: String, CaseIterable {
         }
     }
 
-    var dashboardURL: String? {
+    public var dashboardURL: String? {
         switch self {
         case .codex:
             return AppMeta.dashboardURL
@@ -94,7 +93,7 @@ enum PackageSource: String, CaseIterable {
         }
     }
 
-    var pricingURL: String? {
+    public var pricingURL: String? {
         switch self {
         case .codex:
             return AppMeta.pricingURL
@@ -103,7 +102,7 @@ enum PackageSource: String, CaseIterable {
         }
     }
 
-    var openDashboardTitle: String {
+    public var openDashboardTitle: String {
         switch self {
         case .codex:
             return "打开 Codex 控制台"
@@ -113,7 +112,7 @@ enum PackageSource: String, CaseIterable {
     }
 }
 
-enum StatusDisplayStyle: Int, CaseIterable {
+public enum StatusDisplayStyle: Int, CaseIterable, Sendable {
     case dailyRemainingAmount = 0
     case dailyRemainingCircle = 1
     case weeklyUsedPercent = 2
@@ -127,7 +126,7 @@ enum StatusDisplayStyle: Int, CaseIterable {
     case weeklyUsedAmount = 10
     case weeklyRemainingAmount = 11
 
-    static let selectorOrder: [StatusDisplayStyle] = [
+    public static let selectorOrder: [StatusDisplayStyle] = [
         .dailyUsedAmount,
         .dailyRemainingAmount,
         .dailyUsedCircle,
@@ -142,11 +141,11 @@ enum StatusDisplayStyle: Int, CaseIterable {
         .weeklyRemainingPercent
     ]
 
-    enum TimeRange: String, CaseIterable {
+    public enum TimeRange: String, CaseIterable, Sendable {
         case daily
         case weekly
 
-        var title: String {
+        public var title: String {
             switch self {
             case .daily:
                 return "每日"
@@ -155,7 +154,7 @@ enum StatusDisplayStyle: Int, CaseIterable {
             }
         }
 
-        var symbol: String {
+        public var symbol: String {
             switch self {
             case .daily:
                 return "sun.max"
@@ -165,11 +164,11 @@ enum StatusDisplayStyle: Int, CaseIterable {
         }
     }
 
-    enum MetricKind: String, CaseIterable {
+    public enum MetricKind: String, CaseIterable, Sendable {
         case used
         case remaining
 
-        var title: String {
+        public var title: String {
             switch self {
             case .used:
                 return "用量"
@@ -178,7 +177,7 @@ enum StatusDisplayStyle: Int, CaseIterable {
             }
         }
 
-        var symbol: String {
+        public var symbol: String {
             switch self {
             case .used:
                 return "arrow.up.forward"
@@ -188,12 +187,12 @@ enum StatusDisplayStyle: Int, CaseIterable {
         }
     }
 
-    enum PresentationKind: String, CaseIterable {
+    public enum PresentationKind: String, CaseIterable, Sendable {
         case amount
         case circle
         case percent
 
-        var title: String {
+        public var title: String {
             switch self {
             case .amount:
                 return "金额"
@@ -204,7 +203,7 @@ enum StatusDisplayStyle: Int, CaseIterable {
             }
         }
 
-        var symbol: String {
+        public var symbol: String {
             switch self {
             case .amount:
                 return "banknote"
@@ -216,7 +215,7 @@ enum StatusDisplayStyle: Int, CaseIterable {
         }
     }
 
-    var timeRange: TimeRange {
+    public var timeRange: TimeRange {
         switch self {
         case .dailyUsedAmount, .dailyRemainingAmount, .dailyUsedCircle, .dailyRemainingCircle, .dailyUsedPercent, .dailyRemainingPercent:
             return .daily
@@ -225,7 +224,7 @@ enum StatusDisplayStyle: Int, CaseIterable {
         }
     }
 
-    var metricKind: MetricKind {
+    public var metricKind: MetricKind {
         switch self {
         case .dailyUsedAmount, .dailyUsedCircle, .dailyUsedPercent, .weeklyUsedAmount, .weeklyUsedCircle, .weeklyUsedPercent:
             return .used
@@ -234,7 +233,7 @@ enum StatusDisplayStyle: Int, CaseIterable {
         }
     }
 
-    var presentationKind: PresentationKind {
+    public var presentationKind: PresentationKind {
         switch self {
         case .dailyUsedAmount, .dailyRemainingAmount, .weeklyUsedAmount, .weeklyRemainingAmount:
             return .amount
@@ -245,7 +244,7 @@ enum StatusDisplayStyle: Int, CaseIterable {
         }
     }
 
-    static func resolve(
+    public static func resolve(
         timeRange: TimeRange,
         metricKind: MetricKind,
         presentationKind: PresentationKind
@@ -278,7 +277,7 @@ enum StatusDisplayStyle: Int, CaseIterable {
         }
     }
 
-    var title: String {
+    public var title: String {
         switch self {
         case .dailyUsedAmount:
             return "样式1: 日用：xx.xx"
@@ -307,7 +306,7 @@ enum StatusDisplayStyle: Int, CaseIterable {
         }
     }
 
-    var chipTitle: String {
+    public var chipTitle: String {
         switch self {
         case .dailyUsedAmount:
             return "每日用量(金额)"
@@ -336,7 +335,7 @@ enum StatusDisplayStyle: Int, CaseIterable {
         }
     }
 
-    var selectorSymbol: String {
+    public var selectorSymbol: String {
         switch self {
         case .dailyUsedAmount:
             return "banknote"
@@ -365,7 +364,7 @@ enum StatusDisplayStyle: Int, CaseIterable {
         }
     }
 
-    var selectorPreview: String {
+    public var selectorPreview: String {
         switch self {
         case .dailyUsedAmount:
             return "日用：9.53"
@@ -395,11 +394,11 @@ enum StatusDisplayStyle: Int, CaseIterable {
     }
 }
 
-enum MenuPanelMode {
+public enum MenuPanelMode: Sendable {
     case statistics
     case settings
 
-    var toggleSymbol: String {
+    public var toggleSymbol: String {
         switch self {
         case .statistics:
             return "gearshape"
@@ -408,7 +407,7 @@ enum MenuPanelMode {
         }
     }
 
-    var toggleHint: String {
+    public var toggleHint: String {
         switch self {
         case .statistics:
             return "打开设置"
@@ -418,16 +417,16 @@ enum MenuPanelMode {
     }
 }
 
-enum StatusBarForegroundMode {
+public enum StatusBarForegroundMode: Sendable {
     case autoAdapt
     case manual
 }
 
-enum StatisticsDisplayMode: Int, CaseIterable {
+public enum StatisticsDisplayMode: Int, CaseIterable, Sendable {
     case single = 0
     case dual
 
-    var title: String {
+    public var title: String {
         switch self {
         case .single:
             return "单显"
@@ -436,7 +435,7 @@ enum StatisticsDisplayMode: Int, CaseIterable {
         }
     }
 
-    var fullTitle: String {
+    public var fullTitle: String {
         switch self {
         case .single:
             return "单显模式"
@@ -446,14 +445,14 @@ enum StatisticsDisplayMode: Int, CaseIterable {
     }
 }
 
-enum StatisticsGroupKind: String, CaseIterable, Hashable {
+public enum StatisticsGroupKind: String, CaseIterable, Hashable, Sendable {
     case codex
     case agi
 }
 
-struct StatisticsGroupAccessory {
-    let text: String
-    let tone: SummaryStatusTone?
+public struct StatisticsGroupAccessory: Sendable {
+    public let text: String
+    public let tone: SummaryStatusTone?
 
     static func label(_ text: String) -> StatisticsGroupAccessory {
         StatisticsGroupAccessory(text: text, tone: nil)
@@ -464,22 +463,22 @@ struct StatisticsGroupAccessory {
     }
 }
 
-struct APIEnvelope: Decodable {
-    let code: Int?
-    let msg: String?
-    let state: APIState?
-    let error: String?
-    let details: String?
+public struct APIEnvelope: Decodable, Sendable {
+    public let code: Int?
+    public let msg: String?
+    public let state: APIState?
+    public let error: String?
+    public let details: String?
 }
 
-struct APIState: Decodable {
-    let user: APIUser?
-    let package: PackagePayload?
-    let userPackgeUsageWeek: UsagePayload?
-    let userPackgeUsage: UsagePayload?
-    let remainingQuota: FlexibleNumber?
+public struct APIState: Decodable, Sendable {
+    public let user: APIUser?
+    public let package: PackagePayload?
+    public let userPackgeUsageWeek: UsagePayload?
+    public let userPackgeUsage: UsagePayload?
+    public let remainingQuota: FlexibleNumber?
 
-    enum CodingKeys: String, CodingKey {
+    public enum CodingKeys: String, CodingKey, Sendable {
         case user
         case package
         case userPackgeUsageWeek = "userPackgeUsage_week"
@@ -488,26 +487,26 @@ struct APIState: Decodable {
     }
 }
 
-struct APIUser: Decodable {
-    let email: String?
+public struct APIUser: Decodable, Sendable {
+    public let email: String?
 }
 
-struct UsagePayload: Decodable {
-    let remainingQuota: FlexibleNumber?
-    let usedPercentage: FlexibleNumber?
-    let totalCost: FlexibleNumber?
-    let totalQuota: FlexibleNumber?
-    let requestCount: FlexibleNumber?
-    let inputTokens: FlexibleNumber?
-    let inputTokensCached: FlexibleNumber?
-    let outputTokens: FlexibleNumber?
-    let outputTokensReasoning: FlexibleNumber?
-    let totalTokens: FlexibleNumber?
-    let inputCost: FlexibleNumber?
-    let outputCost: FlexibleNumber?
-    let cacheReadCost: FlexibleNumber?
+public struct UsagePayload: Decodable, Sendable {
+    public let remainingQuota: FlexibleNumber?
+    public let usedPercentage: FlexibleNumber?
+    public let totalCost: FlexibleNumber?
+    public let totalQuota: FlexibleNumber?
+    public let requestCount: FlexibleNumber?
+    public let inputTokens: FlexibleNumber?
+    public let inputTokensCached: FlexibleNumber?
+    public let outputTokens: FlexibleNumber?
+    public let outputTokensReasoning: FlexibleNumber?
+    public let totalTokens: FlexibleNumber?
+    public let inputCost: FlexibleNumber?
+    public let outputCost: FlexibleNumber?
+    public let cacheReadCost: FlexibleNumber?
 
-    enum CodingKeys: String, CodingKey {
+    public enum CodingKeys: String, CodingKey, Sendable {
         case remainingQuota = "remaining_quota"
         case remainingQuotaCamel = "remainingQuota"
         case usedPercentage = "used_percentage"
@@ -536,7 +535,7 @@ struct UsagePayload: Decodable {
         case cacheReadCostCamel = "cacheReadCost"
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         remainingQuota = try container.decodeIfPresent(FlexibleNumber.self, forKey: .remainingQuota)
             ?? container.decodeIfPresent(FlexibleNumber.self, forKey: .remainingQuotaCamel)
@@ -567,25 +566,25 @@ struct UsagePayload: Decodable {
     }
 }
 
-struct PackagePayload: Decodable {
-    let totalQuota: FlexibleNumber?
-    let weeklyQuota: FlexibleNumber?
-    let packages: [PackageItem]?
+public struct PackagePayload: Decodable, Sendable {
+    public let totalQuota: FlexibleNumber?
+    public let weeklyQuota: FlexibleNumber?
+    public let packages: [PackageItem]?
 
-    enum CodingKeys: String, CodingKey {
+    public enum CodingKeys: String, CodingKey, Sendable {
         case totalQuota = "total_quota"
         case weeklyQuota
         case packages
     }
 }
 
-struct PackageItem: Decodable {
-    let packageType: String?
-    let packageStatus: String?
-    let startAt: String?
-    let expiresAt: String?
+public struct PackageItem: Decodable, Sendable {
+    public let packageType: String?
+    public let packageStatus: String?
+    public let startAt: String?
+    public let expiresAt: String?
 
-    enum CodingKeys: String, CodingKey {
+    public enum CodingKeys: String, CodingKey, Sendable {
         case packageType = "package_type"
         case packageStatus = "package_status"
         case startAt = "start_at"
@@ -593,31 +592,31 @@ struct PackageItem: Decodable {
     }
 }
 
-struct AGIPackageEnvelope: Decodable {
-    let code: Int?
-    let message: String?
-    let data: AGIPackageData?
+public struct AGIPackageEnvelope: Decodable, Sendable {
+    public let code: Int?
+    public let message: String?
+    public let data: AGIPackageData?
 }
 
-struct AGIPackageData: Decodable {
-    let packages: [AGIPackageItem]?
-    let summary: AGIPackageSummary?
+public struct AGIPackageData: Decodable, Sendable {
+    public let packages: [AGIPackageItem]?
+    public let summary: AGIPackageSummary?
 }
 
-struct AGIPackageItem: Decodable {
-    let pkgID: String?
-    let orderClass: String?
-    let level: Int?
-    let byteTotal: FlexibleNumber?
-    let byteRemaining: FlexibleNumber?
-    let byteUsed: FlexibleNumber?
-    let day: Int?
-    let expireTime: String?
-    let createTime: String?
-    let reason: String?
-    let type: String?
+public struct AGIPackageItem: Decodable, Sendable {
+    public let pkgID: String?
+    public let orderClass: String?
+    public let level: Int?
+    public let byteTotal: FlexibleNumber?
+    public let byteRemaining: FlexibleNumber?
+    public let byteUsed: FlexibleNumber?
+    public let day: Int?
+    public let expireTime: String?
+    public let createTime: String?
+    public let reason: String?
+    public let type: String?
 
-    enum CodingKeys: String, CodingKey {
+    public enum CodingKeys: String, CodingKey, Sendable {
         case pkgID = "pkg_id"
         case orderClass = "order_class"
         case level
@@ -632,17 +631,17 @@ struct AGIPackageItem: Decodable {
     }
 }
 
-struct AGIPackageSummary: Decodable {
-    let pkgID: String?
-    let totalPackages: Int?
-    let totalByte: FlexibleNumber?
-    let remainingByte: FlexibleNumber?
-    let usedByte: FlexibleNumber?
-    let highestLevel: Int?
-    let userType: String?
-    let latestExpireTime: String?
+public struct AGIPackageSummary: Decodable, Sendable {
+    public let pkgID: String?
+    public let totalPackages: Int?
+    public let totalByte: FlexibleNumber?
+    public let remainingByte: FlexibleNumber?
+    public let usedByte: FlexibleNumber?
+    public let highestLevel: Int?
+    public let userType: String?
+    public let latestExpireTime: String?
 
-    enum CodingKeys: String, CodingKey {
+    public enum CodingKeys: String, CodingKey, Sendable {
         case pkgID = "pkg_id"
         case totalPackages = "total_packages"
         case totalByte = "total_byte"
@@ -654,12 +653,12 @@ struct AGIPackageSummary: Decodable {
     }
 }
 
-enum FlexibleNumber: Decodable {
+public enum FlexibleNumber: Decodable, Sendable {
     case int(Int)
     case double(Double)
     case string(String)
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()
         if let value = try? container.decode(Int.self) {
             self = .int(value)
@@ -682,7 +681,7 @@ enum FlexibleNumber: Decodable {
         )
     }
 
-    var display: String {
+    public var display: String {
         switch self {
         case .int(let value):
             return "\(value)"
@@ -696,7 +695,7 @@ enum FlexibleNumber: Decodable {
         }
     }
 
-    var doubleValue: Double? {
+    public var doubleValue: Double? {
         switch self {
         case .int(let value):
             return Double(value)
@@ -708,100 +707,79 @@ enum FlexibleNumber: Decodable {
     }
 }
 
-enum SummaryStatusTone: Equatable {
+public enum SummaryStatusTone: Equatable, Sendable {
     case neutral
     case success
     case warning
     case critical
-
-    var textColor: NSColor {
-        switch self {
-        case .neutral:
-            return .secondaryLabelColor
-        case .success:
-            return .systemGreen
-        case .warning:
-            return .systemOrange
-        case .critical:
-            return .systemRed
-        }
-    }
-
-    var fillColor: NSColor {
-        textColor.withAlphaComponent(0.12)
-    }
-
-    var borderColor: NSColor {
-        textColor.withAlphaComponent(0.22)
-    }
 }
 
-struct StatusSummaryViewModel {
-    let title: String
-    let currentSource: PackageSource
-    let currentSourceTitle: String
-    let statisticsDisplayMode: StatisticsDisplayMode
-    let statisticsModeText: String
-    let statusText: String
-    let statusTone: SummaryStatusTone
-    let emailText: String
-    let canToggleEmail: Bool
-    let isEmailVisible: Bool
-    let usageLabel: String
-    let usageValue: String
-    let remainingValue: String
-    let renewalLabel: String
-    let renewalValue: String
-    let packageSectionTitle: String?
-    let packageItems: [SummaryPackageItem]
-    let progressLabel: String
-    let progressPrefix: String?
-    let progressValue: String
-    let progress: Double?
-    let footerText: String
-    let hasAPIKey: Bool
-    let hasAGIKey: Bool
-    let codexAPIKeyStatusText: String
-    let agiAPIKeyStatusText: String
-    let codexAPIKeyMaskedText: String
-    let agiAPIKeyMaskedText: String
-    let pollIntervalSeconds: Double
-    let pollIntervalText: String
-    let launchAtLoginEnabled: Bool
-    let launchAtLoginSupported: Bool
-    let launchAtLoginUnavailableReason: String?
-    let displayStyle: StatusDisplayStyle
-    let statusBarForegroundMode: StatusBarForegroundMode
-    let statusBarManualColorHex: String
-    let statusBarColorText: String
-    let panelMode: MenuPanelMode
-    let mcpStatusText: String
-    let mcpEnabled: Bool
-    let mcpPort: UInt16
-    let canOpenDashboard: Bool
-    let canOpenPricing: Bool
-    let dashboardActionTitle: String
-    let sourceGroups: [SourceSummaryGroupViewModel]
-    let mountedModules: [MountedPackageModuleSummary]
-    let codexDashboard: CodexDashboardMetrics
-    let codexUsageRecords: CodexUsageRecordsPanelViewModel
+public struct StatusSummaryViewModel: Sendable {
+    public let title: String
+    public let currentSource: PackageSource
+    public let currentSourceTitle: String
+    public let statisticsDisplayMode: StatisticsDisplayMode
+    public let statisticsModeText: String
+    public let statusText: String
+    public let statusTone: SummaryStatusTone
+    public let emailText: String
+    public let canToggleEmail: Bool
+    public let isEmailVisible: Bool
+    public let usageLabel: String
+    public let usageValue: String
+    public let remainingValue: String
+    public let renewalLabel: String
+    public let renewalValue: String
+    public let packageSectionTitle: String?
+    public let packageItems: [SummaryPackageItem]
+    public let progressLabel: String
+    public let progressPrefix: String?
+    public let progressValue: String
+    public let progress: Double?
+    public let footerText: String
+    public let hasAPIKey: Bool
+    public let hasAGIKey: Bool
+    public let codexAPIKeyStatusText: String
+    public let agiAPIKeyStatusText: String
+    public let codexAPIKeyMaskedText: String
+    public let agiAPIKeyMaskedText: String
+    public let pollIntervalSeconds: Double
+    public let pollIntervalText: String
+    public let launchAtLoginEnabled: Bool
+    public let launchAtLoginSupported: Bool
+    public let launchAtLoginUnavailableReason: String?
+    public let displayStyle: StatusDisplayStyle
+    public let statusBarForegroundMode: StatusBarForegroundMode
+    public let statusBarManualColorHex: String
+    public let statusBarColorText: String
+    public let panelMode: MenuPanelMode
+    public let mcpStatusText: String
+    public let mcpEnabled: Bool
+    public let mcpPort: UInt16
+    public let canOpenDashboard: Bool
+    public let canOpenPricing: Bool
+    public let dashboardActionTitle: String
+    public let sourceGroups: [SourceSummaryGroupViewModel]
+    public let mountedModules: [MountedPackageModuleSummary]
+    public let codexDashboard: CodexDashboardMetrics
+    public let codexUsageRecords: CodexUsageRecordsPanelViewModel
 }
 
-struct CodexDashboardMetrics {
-    let dailyUsedQuota: Double?
-    let dailyTotalQuota: Double?
-    let dailyUsedPercent: Double?
-    let weeklyUsedQuota: Double?
-    let weeklyTotalQuota: Double?
-    let weeklyUsedPercent: Double?
-    let requestCount: Int?
-    let totalCost: Double?
-    let totalTokens: Double?
-    let inputTokens: Double?
-    let cachedInputTokens: Double?
-    let outputTokens: Double?
+public struct CodexDashboardMetrics: Sendable {
+    public let dailyUsedQuota: Double?
+    public let dailyTotalQuota: Double?
+    public let dailyUsedPercent: Double?
+    public let weeklyUsedQuota: Double?
+    public let weeklyTotalQuota: Double?
+    public let weeklyUsedPercent: Double?
+    public let requestCount: Int?
+    public let totalCost: Double?
+    public let totalTokens: Double?
+    public let inputTokens: Double?
+    public let cachedInputTokens: Double?
+    public let outputTokens: Double?
 
-    static let empty = CodexDashboardMetrics(
+    public static let empty = CodexDashboardMetrics(
         dailyUsedQuota: nil,
         dailyTotalQuota: nil,
         dailyUsedPercent: nil,
@@ -817,20 +795,20 @@ struct CodexDashboardMetrics {
     )
 }
 
-struct CodexUsageRecordViewModel {
-    let id: String
-    let timestampText: String
-    let modelText: String
-    let tierText: String
-    let totalTokensText: String
-    let tokenBreakdownText: String
-    let totalCostText: String
-    let costBreakdownText: String
-    let detailURL: String?
-    let totalTokensValue: Double?
-    let totalCostValue: Double?
+public struct CodexUsageRecordViewModel: Sendable {
+    public let id: String
+    public let timestampText: String
+    public let modelText: String
+    public let tierText: String
+    public let totalTokensText: String
+    public let tokenBreakdownText: String
+    public let totalCostText: String
+    public let costBreakdownText: String
+    public let detailURL: String?
+    public let totalTokensValue: Double?
+    public let totalCostValue: Double?
 
-    init(
+    public init(
         id: String,
         timestampText: String,
         modelText: String,
@@ -857,21 +835,21 @@ struct CodexUsageRecordViewModel {
     }
 }
 
-struct CodexUsageRecordsPanelViewModel {
-    let records: [CodexUsageRecordViewModel]
-    let page: Int
-    let pageSize: Int
-    let totalCount: Int?
-    let totalPages: Int?
-    let totalCostText: String?
-    let pageCostText: String?
-    let totalTokensText: String?
-    let pageTokensText: String?
-    let errorText: String?
+public struct CodexUsageRecordsPanelViewModel: Sendable {
+    public let records: [CodexUsageRecordViewModel]
+    public let page: Int
+    public let pageSize: Int
+    public let totalCount: Int?
+    public let totalPages: Int?
+    public let totalCostText: String?
+    public let pageCostText: String?
+    public let totalTokensText: String?
+    public let pageTokensText: String?
+    public let errorText: String?
 }
 
 extension CodexUsageRecordsPanelViewModel {
-    static let empty = CodexUsageRecordsPanelViewModel(
+    public static let empty = CodexUsageRecordsPanelViewModel(
         records: [],
         page: 1,
         pageSize: 20,
@@ -899,7 +877,7 @@ extension CodexUsageRecordsPanelViewModel {
         )
     }
 
-    var summaryText: String {
+    public var summaryText: String {
         var parts: [String] = []
         if let totalCount {
             parts.append("\(totalCount) 条")
@@ -917,52 +895,52 @@ extension CodexUsageRecordsPanelViewModel {
     }
 }
 
-struct SourceSummaryGroupViewModel {
-    let source: PackageSource
-    let statusText: String
-    let statusTone: SummaryStatusTone
-    let usageLabel: String
-    let usageValue: String
-    let remainingValue: String
-    let renewalLabel: String
-    let renewalValue: String
-    let packageItems: [SummaryPackageItem]
-    let progressLabel: String
-    let progressPrefix: String?
-    let progressValue: String
-    let progress: Double?
-    let footerText: String
-    let isExpanded: Bool
+public struct SourceSummaryGroupViewModel: Sendable {
+    public let source: PackageSource
+    public let statusText: String
+    public let statusTone: SummaryStatusTone
+    public let usageLabel: String
+    public let usageValue: String
+    public let remainingValue: String
+    public let renewalLabel: String
+    public let renewalValue: String
+    public let packageItems: [SummaryPackageItem]
+    public let progressLabel: String
+    public let progressPrefix: String?
+    public let progressValue: String
+    public let progress: Double?
+    public let footerText: String
+    public let isExpanded: Bool
 }
 
-struct NormalizedMonitorPayload {
-    let usage: String
-    let remaining: String
-    let renewal: String?
-    let packageItems: [SummaryPackageItem]
-    let usedPercent: Double?
-    let usageLabel: String
-    let progressLabel: String
-    let progressPrefix: String?
-    let email: String?
+public struct NormalizedMonitorPayload: Sendable {
+    public let usage: String
+    public let remaining: String
+    public let renewal: String?
+    public let packageItems: [SummaryPackageItem]
+    public let usedPercent: Double?
+    public let usageLabel: String
+    public let progressLabel: String
+    public let progressPrefix: String?
+    public let email: String?
 }
 
-struct SourceMonitorState {
-    let source: PackageSource
-    var usage: String
-    var remaining: String
-    var renewal: String
-    var message: String
-    var usageLabel: String
-    var progressLabel: String
-    var progressPrefix: String?
-    var email: String?
-    var packageItems: [SummaryPackageItem]
-    var usedPercent: Double?
-    var fallbackText: String
-    var dailyRemaining: String?
-    var dailyUsagePayload: UsagePayload?
-    var weeklyUsagePayload: UsagePayload?
+public struct SourceMonitorState: Sendable {
+    public let source: PackageSource
+    public var usage: String
+    public var remaining: String
+    public var renewal: String
+    public var message: String
+    public var usageLabel: String
+    public var progressLabel: String
+    public var progressPrefix: String?
+    public var email: String?
+    public var packageItems: [SummaryPackageItem]
+    public var usedPercent: Double?
+    public var fallbackText: String
+    public var dailyRemaining: String?
+    public var dailyUsagePayload: UsagePayload?
+    public var weeklyUsagePayload: UsagePayload?
 
     static func placeholder(for source: PackageSource, hasAPIKey: Bool) -> SourceMonitorState {
         SourceMonitorState(
@@ -985,39 +963,33 @@ struct SourceMonitorState {
     }
 }
 
-struct MountedPackageModuleSummary {
-    let title: String
-    let statusText: String
-    let statusTone: SummaryStatusTone
-    let usageLabel: String
-    let usageValue: String
-    let remainingLabel: String
-    let remainingValue: String
-    let renewalLabel: String
-    let renewalValue: String
-    let progressLabel: String
-    let progressValue: String
-    let progress: Double?
-    let footerText: String
-    let packageSectionTitle: String?
-    let packageItems: [SummaryPackageItem]
+public struct MountedPackageModuleSummary: Sendable {
+    public let title: String
+    public let statusText: String
+    public let statusTone: SummaryStatusTone
+    public let usageLabel: String
+    public let usageValue: String
+    public let remainingLabel: String
+    public let remainingValue: String
+    public let renewalLabel: String
+    public let renewalValue: String
+    public let progressLabel: String
+    public let progressValue: String
+    public let progress: Double?
+    public let footerText: String
+    public let packageSectionTitle: String?
+    public let packageItems: [SummaryPackageItem]
 }
 
-struct SummaryPackageItem {
-    let title: String
-    let subtitle: String
-    let badgeText: String
-    let badgeTone: SummaryStatusTone
-}
-
-extension SummaryStatusTone {
-    var swiftUIColor: Color { Color(nsColor: textColor) }
-    var swiftUIFillColor: Color { Color(nsColor: fillColor) }
-    var swiftUIBorderColor: Color { Color(nsColor: borderColor) }
+public struct SummaryPackageItem: Sendable {
+    public let title: String
+    public let subtitle: String
+    public let badgeText: String
+    public let badgeTone: SummaryStatusTone
 }
 
 extension StatusSummaryViewModel {
-    static let placeholder = StatusSummaryViewModel(
+    public static let placeholder = StatusSummaryViewModel(
         title: AppMeta.displayName,
         currentSource: .codex,
         currentSourceTitle: PackageSource.codex.chipTitle,

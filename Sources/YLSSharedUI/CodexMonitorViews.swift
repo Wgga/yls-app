@@ -1,5 +1,11 @@
-import AppKit
 import SwiftUI
+import YLSShared
+
+#if os(macOS)
+import AppKit
+#else
+import UIKit
+#endif
 
 private extension Color {
     init(hex: UInt32) {
@@ -10,6 +16,7 @@ private extension Color {
     }
 }
 
+#if os(macOS)
 private final class CustomSkinSliderHitView: NSView {
     var knobDiameter: CGFloat = 24
     var onValueChange: ((Double) -> Void)?
@@ -77,12 +84,37 @@ private struct CustomSkinSliderHitLayer: NSViewRepresentable {
         }
     }
 }
+#endif
+
+extension SummaryStatusTone {
+    var swiftUIColor: Color {
+        switch self {
+        case .neutral:
+            return .secondary
+        case .success:
+            return .green
+        case .warning:
+            return .orange
+        case .critical:
+            return .red
+        }
+    }
+
+    var swiftUIFillColor: Color {
+        swiftUIColor.opacity(0.12)
+    }
+
+    var swiftUIBorderColor: Color {
+        swiftUIColor.opacity(0.22)
+    }
+}
 
 extension View {
     @ViewBuilder
     func compactSurface(cornerRadius: CGFloat, tint: Color = .clear) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         #if compiler(>=6.2)
+        #if os(macOS)
         if #available(macOS 26.0, *) {
             self
                 .background {
@@ -111,6 +143,20 @@ extension View {
                     shape.stroke(.quaternary, lineWidth: 0.8)
                 }
         }
+        #else
+        self
+            .background {
+                ZStack {
+                    shape
+                        .fill(.ultraThinMaterial)
+                    shape
+                        .fill(tint)
+                }
+            }
+            .overlay {
+                shape.stroke(.quaternary, lineWidth: 0.8)
+            }
+        #endif
         #else
         self
             .background {
@@ -523,9 +569,9 @@ struct SourceSummaryGroupView: View {
     init(
         model: SourceSummaryGroupViewModel,
         codexDashboard: CodexDashboardMetrics = .empty,
-        successBadgeColor: Color = Color(nsColor: .systemGreen),
+        successBadgeColor: Color = .green,
         useCustomSkin: Bool = false,
-        customSkinAccentColor: Color = Color(nsColor: .systemGreen),
+        customSkinAccentColor: Color = .green,
         onToggle: (() -> Void)? = nil
     ) {
         self.model = model
@@ -1145,24 +1191,24 @@ private enum DashboardTab: String, CaseIterable {
     }
 }
 
-struct MonitorDashboardShellView: View {
-    let model: StatusSummaryViewModel
-    let onTogglePanelMode: (() -> Void)?
-    let onToggleEmail: (() -> Void)?
-    let onRefresh: (() -> Void)?
-    let onSelectStatisticsMode: ((StatisticsDisplayMode) -> Void)?
-    let onSelectSource: ((PackageSource) -> Void)?
-    let onSetAPIKey: ((PackageSource, String) -> Void)?
-    let onSetInterval: ((Double) -> Void)?
-    let onOpenDashboard: (() -> Void)?
-    let onOpenPricing: (() -> Void)?
-    let onSelectDisplayStyle: ((StatusDisplayStyle) -> Void)?
-    let onToggleSourceGroup: ((PackageSource) -> Void)?
-    let onToggleLaunchAtLogin: ((Bool) -> Void)?
-    let onConfigureMCP: ((Bool, UInt16) -> Void)?
-    let onSetStatusBarColor: ((StatusBarForegroundMode, String) -> Void)?
-    let onSelectUsageLogsPage: ((Int) -> Void)?
-    let onOpenUsageLogDetail: ((String) -> Void)?
+public struct MonitorDashboardShellView: View {
+    public let model: StatusSummaryViewModel
+    public let onTogglePanelMode: (() -> Void)?
+    public let onToggleEmail: (() -> Void)?
+    public let onRefresh: (() -> Void)?
+    public let onSelectStatisticsMode: ((StatisticsDisplayMode) -> Void)?
+    public let onSelectSource: ((PackageSource) -> Void)?
+    public let onSetAPIKey: ((PackageSource, String) -> Void)?
+    public let onSetInterval: ((Double) -> Void)?
+    public let onOpenDashboard: (() -> Void)?
+    public let onOpenPricing: (() -> Void)?
+    public let onSelectDisplayStyle: ((StatusDisplayStyle) -> Void)?
+    public let onToggleSourceGroup: ((PackageSource) -> Void)?
+    public let onToggleLaunchAtLogin: ((Bool) -> Void)?
+    public let onConfigureMCP: ((Bool, UInt16) -> Void)?
+    public let onSetStatusBarColor: ((StatusBarForegroundMode, String) -> Void)?
+    public let onSelectUsageLogsPage: ((Int) -> Void)?
+    public let onOpenUsageLogDetail: ((String) -> Void)?
 
     @Environment(\.colorScheme) private var systemColorScheme
     @State private var selectedTab: DashboardTab = .usageOverview
@@ -1184,6 +1230,44 @@ struct MonitorDashboardShellView: View {
     @AppStorage("skin_custom_swatch_id") private var selectedCustomSkinSwatchID = "000000"
     private let sidebarWidth: CGFloat = 194
     private let themeTransitionAnimation: Animation = .easeInOut(duration: 0.25)
+
+    public init(
+        model: StatusSummaryViewModel,
+        onTogglePanelMode: (() -> Void)?,
+        onToggleEmail: (() -> Void)?,
+        onRefresh: (() -> Void)?,
+        onSelectStatisticsMode: ((StatisticsDisplayMode) -> Void)?,
+        onSelectSource: ((PackageSource) -> Void)?,
+        onSetAPIKey: ((PackageSource, String) -> Void)?,
+        onSetInterval: ((Double) -> Void)?,
+        onOpenDashboard: (() -> Void)?,
+        onOpenPricing: (() -> Void)?,
+        onSelectDisplayStyle: ((StatusDisplayStyle) -> Void)?,
+        onToggleSourceGroup: ((PackageSource) -> Void)?,
+        onToggleLaunchAtLogin: ((Bool) -> Void)?,
+        onConfigureMCP: ((Bool, UInt16) -> Void)?,
+        onSetStatusBarColor: ((StatusBarForegroundMode, String) -> Void)?,
+        onSelectUsageLogsPage: ((Int) -> Void)?,
+        onOpenUsageLogDetail: ((String) -> Void)?
+    ) {
+        self.model = model
+        self.onTogglePanelMode = onTogglePanelMode
+        self.onToggleEmail = onToggleEmail
+        self.onRefresh = onRefresh
+        self.onSelectStatisticsMode = onSelectStatisticsMode
+        self.onSelectSource = onSelectSource
+        self.onSetAPIKey = onSetAPIKey
+        self.onSetInterval = onSetInterval
+        self.onOpenDashboard = onOpenDashboard
+        self.onOpenPricing = onOpenPricing
+        self.onSelectDisplayStyle = onSelectDisplayStyle
+        self.onToggleSourceGroup = onToggleSourceGroup
+        self.onToggleLaunchAtLogin = onToggleLaunchAtLogin
+        self.onConfigureMCP = onConfigureMCP
+        self.onSetStatusBarColor = onSetStatusBarColor
+        self.onSelectUsageLogsPage = onSelectUsageLogsPage
+        self.onOpenUsageLogDetail = onOpenUsageLogDetail
+    }
 
     private enum SkinSourceOption: String, CaseIterable {
         case official
@@ -1279,11 +1363,11 @@ struct MonitorDashboardShellView: View {
     }
 
     private var settingsAccentColor: Color {
-        isCustomSkinSelected ? themeAccentColor : Color(nsColor: .systemGreen)
+        isCustomSkinSelected ? themeAccentColor : .green
     }
 
     private var successBadgeColor: Color {
-        isCustomSkinSelected ? customSkinColor : Color(nsColor: .systemGreen)
+        isCustomSkinSelected ? customSkinColor : .green
     }
 
     private var visibleThemeAccentColor: Color {
@@ -1408,10 +1492,10 @@ struct MonitorDashboardShellView: View {
             Bundle.main.url(forResource: "yls_logo", withExtension: "png"),
             Bundle.main.resourceURL?.appendingPathComponent("yls_logo.png"),
             executableDirectory
-                .appendingPathComponent("yls-app_yls-app.bundle")
+                .appendingPathComponent("YLSMacOSApp_YLSMacOSApp.bundle")
                 .appendingPathComponent("yls_logo.png"),
             executableDirectory
-                .appendingPathComponent("yls-app_yls-app.bundle")
+                .appendingPathComponent("YLSMacOSApp_YLSMacOSApp.bundle")
                 .appendingPathComponent("Contents")
                 .appendingPathComponent("Resources")
                 .appendingPathComponent("yls_logo.png"),
@@ -1420,15 +1504,25 @@ struct MonitorDashboardShellView: View {
         }
 
         for candidate in candidates {
+            #if os(macOS)
             if let url = candidate, let nsImage = NSImage(contentsOf: url) {
                 return Image(nsImage: nsImage)
             }
+            #else
+            if let url = candidate, let uiImage = UIImage(contentsOfFile: url.path) {
+                return Image(uiImage: uiImage)
+            }
+            #endif
         }
 
+        #if os(macOS)
         return Image(nsImage: NSApplication.shared.applicationIconImage)
+        #else
+        return Image(systemName: "chart.line.uptrend.xyaxis")
+        #endif
     }
 
-    var body: some View {
+    public var body: some View {
         VStack(spacing: 0) {
             topBar
 
@@ -1943,12 +2037,26 @@ struct MonitorDashboardShellView: View {
                     .shadow(color: Color.black.opacity(0.22), radius: 2, x: 0, y: 1)
                     .offset(x: knobX)
 
+                #if os(macOS)
                 CustomSkinSliderHitLayer(
                     value: value,
                     knobDiameter: knobDiameter,
                     onChanged: onChanged
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                #else
+                Rectangle()
+                    .fill(Color.clear)
+                    .contentShape(Rectangle())
+                    .gesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { gesture in
+                                let rawValue = Double((gesture.location.x - trackInset) / availableWidth)
+                                value.wrappedValue = max(0, min(1, rawValue))
+                                onChanged?()
+                            }
+                    )
+                #endif
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             .contentShape(Rectangle())
@@ -2511,6 +2619,7 @@ struct MonitorDashboardShellView: View {
     }
 
     private var statusBarManualColorHexText: String {
+        #if os(macOS)
         let nsColor = NSColor(statusBarManualColorDraft).usingColorSpace(.sRGB)
             ?? NSColor(statusBarManualColorDraft).usingColorSpace(.deviceRGB)
             ?? .white
@@ -2518,6 +2627,20 @@ struct MonitorDashboardShellView: View {
         let green = Int(round(nsColor.greenComponent * 255))
         let blue = Int(round(nsColor.blueComponent * 255))
         return String(format: "#%02X%02X%02X", red, green, blue)
+        #else
+        let uiColor = UIColor(statusBarManualColorDraft)
+        var red: CGFloat = 1
+        var green: CGFloat = 1
+        var blue: CGFloat = 1
+        var alpha: CGFloat = 1
+        uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        return String(
+            format: "#%02X%02X%02X",
+            Int(round(red * 255)),
+            Int(round(green * 255)),
+            Int(round(blue * 255))
+        )
+        #endif
     }
 
     private func applyStatusBarColorSettings() {
@@ -3391,68 +3514,69 @@ struct MonitorDashboardShellView: View {
     private static let largeIntegerRegex = try? NSRegularExpression(pattern: #"(?<![\d.])\d{4,}(?![\d.])"#)
 }
 
-final class StatusSummaryView: NSView {
-    static let preferredWidth: CGFloat = 1008
-    static let preferredHeight: CGFloat = 647
+#if os(macOS)
+public final class StatusSummaryView: NSView {
+    public static let preferredWidth: CGFloat = 1008
+    public static let preferredHeight: CGFloat = 647
 
-    var onTogglePanelMode: (() -> Void)? {
+    public var onTogglePanelMode: (() -> Void)? {
         didSet { updateRootView() }
     }
-    var onToggleEmail: (() -> Void)? {
+    public var onToggleEmail: (() -> Void)? {
         didSet { updateRootView() }
     }
-    var onRefresh: (() -> Void)? {
+    public var onRefresh: (() -> Void)? {
         didSet { updateRootView() }
     }
-    var onSelectStatisticsMode: ((StatisticsDisplayMode) -> Void)? {
+    public var onSelectStatisticsMode: ((StatisticsDisplayMode) -> Void)? {
         didSet { updateRootView() }
     }
-    var onSelectSource: ((PackageSource) -> Void)? {
+    public var onSelectSource: ((PackageSource) -> Void)? {
         didSet { updateRootView() }
     }
-    var onSetAPIKey: ((PackageSource, String) -> Void)? {
+    public var onSetAPIKey: ((PackageSource, String) -> Void)? {
         didSet { updateRootView() }
     }
-    var onSetInterval: ((Double) -> Void)? {
+    public var onSetInterval: ((Double) -> Void)? {
         didSet { updateRootView() }
     }
-    var onOpenDashboard: (() -> Void)? {
+    public var onOpenDashboard: (() -> Void)? {
         didSet { updateRootView() }
     }
-    var onOpenPricing: (() -> Void)? {
+    public var onOpenPricing: (() -> Void)? {
         didSet { updateRootView() }
     }
-    var onSelectDisplayStyle: ((StatusDisplayStyle) -> Void)? {
+    public var onSelectDisplayStyle: ((StatusDisplayStyle) -> Void)? {
         didSet { updateRootView() }
     }
-    var onToggleSourceGroup: ((PackageSource) -> Void)? {
+    public var onToggleSourceGroup: ((PackageSource) -> Void)? {
         didSet { updateRootView() }
     }
-    var onToggleLaunchAtLogin: ((Bool) -> Void)? {
+    public var onToggleLaunchAtLogin: ((Bool) -> Void)? {
         didSet { updateRootView() }
     }
-    var onConfigureMCP: ((Bool, UInt16) -> Void)? {
+    public var onConfigureMCP: ((Bool, UInt16) -> Void)? {
         didSet { updateRootView() }
     }
-    var onSetStatusBarColor: ((StatusBarForegroundMode, String) -> Void)? {
+    public var onSetStatusBarColor: ((StatusBarForegroundMode, String) -> Void)? {
         didSet { updateRootView() }
     }
-    var onSelectUsageLogsPage: ((Int) -> Void)? {
+    public var onSelectUsageLogsPage: ((Int) -> Void)? {
         didSet { updateRootView() }
     }
-    var onOpenUsageLogDetail: ((String) -> Void)? {
+    public var onOpenUsageLogDetail: ((String) -> Void)? {
         didSet { updateRootView() }
     }
 
     private var model = StatusSummaryViewModel.placeholder
     private let hostingView: NSHostingView<MonitorDashboardShellView>
 
-    override var intrinsicContentSize: NSSize {
+    public override var intrinsicContentSize: NSSize {
         let size = hostingView.fittingSize
         return NSSize(width: max(Self.preferredWidth, size.width), height: max(Self.preferredHeight, size.height))
     }
 
-    override init(frame frameRect: NSRect) {
+    public override init(frame frameRect: NSRect) {
         hostingView = NSHostingView(
             rootView: MonitorDashboardShellView(
                 model: .placeholder,
@@ -3492,11 +3616,11 @@ final class StatusSummaryView: NSView {
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) {
+    public required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
 
-    func apply(_ model: StatusSummaryViewModel) {
+    public func apply(_ model: StatusSummaryViewModel) {
         self.model = model
         updateRootView()
     }
@@ -3525,3 +3649,4 @@ final class StatusSummaryView: NSView {
         invalidateIntrinsicContentSize()
     }
 }
+#endif

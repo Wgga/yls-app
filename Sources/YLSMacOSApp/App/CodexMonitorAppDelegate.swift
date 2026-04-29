@@ -2,6 +2,8 @@ import AppKit
 import Foundation
 import ServiceManagement
 import SwiftUI
+import YLSShared
+import YLSSharedUI
 
 public enum CodexMonitorBootstrap {
     @MainActor
@@ -205,8 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         summaryView.onSetStatusBarColor = { [weak self] mode, manualColorHex in
             self?.performMenuAction {
                 guard let self else { return }
-                let color = Self.colorFromHexString(manualColorHex) ?? self.store.statusBarManualColor
-                self.store.setStatusBarColor(mode: mode, color: color)
+                self.store.setStatusBarColor(mode: mode, colorHex: manualColorHex)
             }
         }
         renderSummaryView()
@@ -596,7 +597,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     private func resolvedStatusBarForegroundColor(for button: NSStatusBarButton?) -> NSColor {
         switch store.statusBarForegroundMode {
         case .manual:
-            return store.statusBarManualColor
+            return Self.colorFromHexString(store.statusBarManualColorHex) ?? .white
         case .autoAdapt:
             guard let button else { return .white }
             let matched = button.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua])

@@ -1,7 +1,7 @@
 import Foundation
 
 @MainActor
-protocol CodexMonitorNetworkServing {
+public protocol CodexMonitorNetworkServing {
     func fetchCodexUsageInfo(
         using request: CodexUsageInfoRequestViewModel
     ) async throws -> CodexUsageInfoResponseViewModel
@@ -15,18 +15,18 @@ protocol CodexMonitorNetworkServing {
     ) async throws -> AGIPackageInfoResponseViewModel
 }
 
-enum CodexMonitorHTTPMethod: String {
+public enum CodexMonitorHTTPMethod: String, Sendable {
     case get = "GET"
 }
 
-struct CodexUsageInfoRequestViewModel {
-    let endpoint: URL
-    let method: CodexMonitorHTTPMethod
-    let bearerToken: String
-    let timeoutInterval: TimeInterval
-    let queryItems: [URLQueryItem]
+public struct CodexUsageInfoRequestViewModel: Sendable {
+    public let endpoint: URL
+    public let method: CodexMonitorHTTPMethod
+    public let bearerToken: String
+    public let timeoutInterval: TimeInterval
+    public let queryItems: [URLQueryItem]
 
-    init(
+    public init(
         apiKey: String,
         endpoint: URL = AppMeta.codexEndpoint,
         timeoutInterval: TimeInterval = 20,
@@ -39,7 +39,7 @@ struct CodexUsageInfoRequestViewModel {
         self.queryItems = queryItems
     }
 
-    var headers: [String: String] {
+    public var headers: [String: String] {
         ["Authorization": "Bearer \(bearerToken)"]
     }
 
@@ -59,15 +59,15 @@ struct CodexUsageInfoRequestViewModel {
     }
 }
 
-struct CodexUsageLogsRequestViewModel {
-    let endpoint: URL
-    let method: CodexMonitorHTTPMethod
-    let bearerToken: String
-    let timeoutInterval: TimeInterval
-    let page: Int
-    let pageSize: Int
+public struct CodexUsageLogsRequestViewModel: Sendable {
+    public let endpoint: URL
+    public let method: CodexMonitorHTTPMethod
+    public let bearerToken: String
+    public let timeoutInterval: TimeInterval
+    public let page: Int
+    public let pageSize: Int
 
-    init(
+    public init(
         apiKey: String,
         page: Int,
         pageSize: Int,
@@ -82,14 +82,14 @@ struct CodexUsageLogsRequestViewModel {
         self.pageSize = max(1, pageSize)
     }
 
-    var queryItems: [URLQueryItem] {
+    public var queryItems: [URLQueryItem] {
         [
             URLQueryItem(name: "page", value: "\(page)"),
             URLQueryItem(name: "page_size", value: "\(pageSize)"),
         ]
     }
 
-    var headers: [String: String] {
+    public var headers: [String: String] {
         ["Authorization": "Bearer \(bearerToken)"]
     }
 
@@ -107,14 +107,14 @@ struct CodexUsageLogsRequestViewModel {
     }
 }
 
-struct AGIPackageInfoRequestViewModel {
-    let endpoint: URL
-    let method: CodexMonitorHTTPMethod
-    let bearerToken: String
-    let timeoutInterval: TimeInterval
-    let queryItems: [URLQueryItem]
+public struct AGIPackageInfoRequestViewModel: Sendable {
+    public let endpoint: URL
+    public let method: CodexMonitorHTTPMethod
+    public let bearerToken: String
+    public let timeoutInterval: TimeInterval
+    public let queryItems: [URLQueryItem]
 
-    init(
+    public init(
         apiKey: String,
         endpoint: URL = AppMeta.agiPackageEndpoint,
         timeoutInterval: TimeInterval = 20,
@@ -127,7 +127,7 @@ struct AGIPackageInfoRequestViewModel {
         self.queryItems = queryItems
     }
 
-    var headers: [String: String] {
+    public var headers: [String: String] {
         ["Authorization": "Bearer \(bearerToken)"]
     }
 
@@ -147,15 +147,15 @@ struct AGIPackageInfoRequestViewModel {
     }
 }
 
-struct CodexUsageInfoResponseViewModel {
-    struct Metadata {
+public struct CodexUsageInfoResponseViewModel: Sendable {
+    public struct Metadata: Sendable {
         let httpStatusCode: Int
         let businessCode: Int?
         let message: String?
         let details: String?
     }
 
-    struct StateViewModel {
+    public struct StateViewModel: Sendable {
         let email: String?
         let usageText: String
         let remainingText: String
@@ -171,36 +171,36 @@ struct CodexUsageInfoResponseViewModel {
         let weeklyUsagePayload: UsagePayload?
     }
 
-    let request: CodexUsageInfoRequestViewModel
-    let metadata: Metadata
-    let state: StateViewModel
+    public let request: CodexUsageInfoRequestViewModel
+    public let metadata: Metadata
+    public let state: StateViewModel
 }
 
-struct CodexUsageLogsResponseViewModel {
-    struct Metadata {
+public struct CodexUsageLogsResponseViewModel: Sendable {
+    public struct Metadata: Sendable {
         let httpStatusCode: Int
         let businessCode: Int?
         let message: String?
         let details: String?
     }
 
-    struct StateViewModel {
+    public struct StateViewModel: Sendable {
         let panel: CodexUsageRecordsPanelViewModel
     }
 
-    let request: CodexUsageLogsRequestViewModel
-    let metadata: Metadata
-    let state: StateViewModel
+    public let request: CodexUsageLogsRequestViewModel
+    public let metadata: Metadata
+    public let state: StateViewModel
 }
 
-struct AGIPackageInfoResponseViewModel {
-    struct Metadata {
+public struct AGIPackageInfoResponseViewModel: Sendable {
+    public struct Metadata: Sendable {
         let httpStatusCode: Int
         let businessCode: Int?
         let message: String?
     }
 
-    struct StateViewModel {
+    public struct StateViewModel: Sendable {
         let usageText: String
         let remainingText: String
         let usedPercent: Double?
@@ -208,12 +208,12 @@ struct AGIPackageInfoResponseViewModel {
         let packageItems: [SummaryPackageItem]
     }
 
-    let request: AGIPackageInfoRequestViewModel
-    let metadata: Metadata
-    let state: StateViewModel
+    public let request: AGIPackageInfoRequestViewModel
+    public let metadata: Metadata
+    public let state: StateViewModel
 }
 
-enum CodexMonitorNetworkError: Error {
+public enum CodexMonitorNetworkError: Error, Sendable {
     case invalidHTTPResponse(source: PackageSource)
     case httpStatus(source: PackageSource, statusCode: Int)
     case business(source: PackageSource, code: Int, message: String)
@@ -224,14 +224,14 @@ enum CodexMonitorNetworkError: Error {
 }
 
 @MainActor
-final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
+public final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
     private let session: URLSession
 
-    init(session: URLSession = .shared) {
+    public init(session: URLSession = .shared) {
         self.session = session
     }
 
-    func fetchCodexUsageInfo(
+    public func fetchCodexUsageInfo(
         using request: CodexUsageInfoRequestViewModel
     ) async throws -> CodexUsageInfoResponseViewModel {
         let urlRequest = request.makeURLRequest()
@@ -352,7 +352,7 @@ final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
         )
     }
 
-    func fetchCodexUsageLogs(
+    public func fetchCodexUsageLogs(
         using request: CodexUsageLogsRequestViewModel
     ) async throws -> CodexUsageLogsResponseViewModel {
         let urlRequest = request.makeURLRequest()
@@ -432,7 +432,7 @@ final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
         )
     }
 
-    func fetchAGIPackageInfo(
+    public func fetchAGIPackageInfo(
         using request: AGIPackageInfoRequestViewModel
     ) async throws -> AGIPackageInfoResponseViewModel {
         let urlRequest = request.makeURLRequest()
@@ -893,25 +893,25 @@ final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
 }
 
 private struct CodexUsageLogsEnvelope: Decodable {
-    let code: Int?
-    let msg: String?
-    let error: String?
-    let details: String?
-    let data: CodexUsageLogsDataPayload?
+    public let code: Int?
+    public let msg: String?
+    public let error: String?
+    public let details: String?
+    public let data: CodexUsageLogsDataPayload?
 }
 
 private struct CodexUsageLogsDataPayload: Decodable {
-    let records: [CodexUsageLogPayload]
-    let page: Int?
-    let pageSize: Int?
-    let totalCount: Int?
-    let totalPages: Int?
-    let totalCost: Double?
-    let pageCost: Double?
-    let totalTokens: Double?
-    let pageTokens: Double?
+    public let records: [CodexUsageLogPayload]
+    public let page: Int?
+    public let pageSize: Int?
+    public let totalCount: Int?
+    public let totalPages: Int?
+    public let totalCost: Double?
+    public let pageCost: Double?
+    public let totalTokens: Double?
+    public let pageTokens: Double?
 
-    enum CodingKeys: String, CodingKey {
+    public enum CodingKeys: String, CodingKey, Sendable {
         case list
         case logs
         case items
@@ -936,7 +936,7 @@ private struct CodexUsageLogsDataPayload: Decodable {
         case pageTokensSnake = "page_tokens"
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         if let list = try? [CodexUsageLogPayload](from: decoder) {
             records = list
             page = nil
@@ -1016,23 +1016,23 @@ private struct CodexUsageLogsDataPayload: Decodable {
 }
 
 private struct CodexUsageLogPayload: Decodable {
-    let id: String?
-    let requestID: String?
-    let timestamp: String?
-    let model: String?
-    let tier: String?
-    let totalTokens: Double?
-    let inputTokens: Double?
-    let inputTokensCached: Double?
-    let outputTokens: Double?
-    let outputTokensReasoning: Double?
-    let totalCost: Double?
-    let inputCost: Double?
-    let outputCost: Double?
-    let cacheReadCost: Double?
-    let detailURL: String?
+    public let id: String?
+    public let requestID: String?
+    public let timestamp: String?
+    public let model: String?
+    public let tier: String?
+    public let totalTokens: Double?
+    public let inputTokens: Double?
+    public let inputTokensCached: Double?
+    public let outputTokens: Double?
+    public let outputTokensReasoning: Double?
+    public let totalCost: Double?
+    public let inputCost: Double?
+    public let outputCost: Double?
+    public let cacheReadCost: Double?
+    public let detailURL: String?
 
-    enum CodingKeys: String, CodingKey {
+    public enum CodingKeys: String, CodingKey, Sendable {
         case id
         case logID = "log_id"
         case requestID = "request_id"
@@ -1071,7 +1071,7 @@ private struct CodexUsageLogPayload: Decodable {
         case url
     }
 
-    init(from decoder: Decoder) throws {
+    public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
 
         id = try container.decodeIfPresent(String.self, forKey: .id)
