@@ -80,35 +80,6 @@ private struct CustomSkinSliderHitLayer: NSViewRepresentable {
 
 extension View {
     @ViewBuilder
-    func liquidGlassCapsule() -> some View {
-        #if compiler(>=6.2)
-        if #available(macOS 26.0, *) {
-            self
-                .background {
-                    Rectangle()
-                        .fill(.clear)
-                        .glassEffect(.regular, in: Capsule())
-                }
-                .overlay {
-                    Capsule().stroke(.quaternary, lineWidth: 0.8)
-                }
-        } else {
-            self
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay {
-                    Capsule().stroke(.quaternary, lineWidth: 0.8)
-                }
-        }
-        #else
-        self
-            .background(.ultraThinMaterial, in: Capsule())
-            .overlay {
-                Capsule().stroke(.quaternary, lineWidth: 0.8)
-            }
-        #endif
-    }
-
-    @ViewBuilder
     func compactSurface(cornerRadius: CGFloat, tint: Color = .clear) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         #if compiler(>=6.2)
@@ -176,18 +147,30 @@ extension View {
     func summaryDashboardSurface(
         cornerRadius: CGFloat,
         colorScheme: ColorScheme,
-        elevated: Bool = false
+        elevated: Bool = false,
+        useCustomSkin: Bool = false,
+        customAccent: Color = .clear
     ) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         let fill: Color
         let border: Color
 
-        if colorScheme == .dark {
-            fill = elevated ? Color.white.opacity(0.07) : Color.white.opacity(0.05)
-            border = Color.white.opacity(0.11)
+        if useCustomSkin {
+            if colorScheme == .dark {
+                fill = elevated ? Color.white.opacity(0.07) : Color.white.opacity(0.05)
+                border = customAccent.opacity(0.30)
+            } else {
+                fill = elevated ? Color.white.opacity(0.98) : Color.white.opacity(0.92)
+                border = customAccent.opacity(0.32)
+            }
         } else {
-            fill = elevated ? Color.white.opacity(0.98) : Color.white.opacity(0.92)
-            border = Color.black.opacity(0.08)
+            if colorScheme == .dark {
+                fill = elevated ? Color.white.opacity(0.07) : Color.white.opacity(0.05)
+                border = Color.white.opacity(0.11)
+            } else {
+                fill = elevated ? Color.white.opacity(0.98) : Color.white.opacity(0.92)
+                border = Color.black.opacity(0.08)
+            }
         }
 
         return self
@@ -305,6 +288,7 @@ struct StyleChipButton: View {
                     Text(style.chipTitle)
                         .font(.system(size: 11, weight: .semibold))
                         .lineLimit(1)
+                        .minimumScaleFactor(0.78)
                     Spacer(minLength: 4)
                 }
                 .foregroundStyle(isSelected ? .primary : .secondary)
@@ -313,7 +297,7 @@ struct StyleChipButton: View {
                     .font(.system(size: 10, weight: .medium, design: .monospaced))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.9)
+                    .minimumScaleFactor(0.72)
             }
             .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
             .padding(.horizontal, 10)
@@ -333,6 +317,127 @@ struct StyleChipButton: View {
         }
         .buttonStyle(.plain)
         .onHover { isHovered = $0 }
+    }
+}
+
+struct StyleAxisOptionButton: View {
+    let title: String
+    let systemImage: String
+    let isSelected: Bool
+    let action: () -> Void
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 5) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 9.5, weight: .semibold))
+                Text(title)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.84)
+            }
+            .foregroundStyle(isSelected ? .primary : .secondary)
+            .frame(maxWidth: .infinity, minHeight: 30)
+            .padding(.horizontal, 8)
+            .contentMaterialSurface(
+                cornerRadius: 10,
+                tint: isSelected
+                    ? .secondary.opacity(0.16)
+                    : (isHovered ? .primary.opacity(0.08) : .clear)
+            )
+            .overlay {
+                if isSelected {
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(.tertiary, lineWidth: 0.8)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
+struct StatusStyleQuickPicker: View {
+    let style: StatusDisplayStyle
+    let onSelect: (StatusDisplayStyle) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            axisRow(title: "范围") {
+                ForEach(StatusDisplayStyle.TimeRange.allCases, id: \.rawValue) { option in
+                    StyleAxisOptionButton(
+                        title: option.title,
+                        systemImage: option.symbol,
+                        isSelected: style.timeRange == option
+                    ) {
+                        update(
+                            timeRange: option,
+                            metricKind: style.metricKind,
+                            presentationKind: style.presentationKind
+                        )
+                    }
+                }
+            }
+
+            axisRow(title: "指标") {
+                ForEach(StatusDisplayStyle.MetricKind.allCases, id: \.rawValue) { option in
+                    StyleAxisOptionButton(
+                        title: option.title,
+                        systemImage: option.symbol,
+                        isSelected: style.metricKind == option
+                    ) {
+                        update(
+                            timeRange: style.timeRange,
+                            metricKind: option,
+                            presentationKind: style.presentationKind
+                        )
+                    }
+                }
+            }
+
+            axisRow(title: "展示") {
+                ForEach(StatusDisplayStyle.PresentationKind.allCases, id: \.rawValue) { option in
+                    StyleAxisOptionButton(
+                        title: option.title,
+                        systemImage: option.symbol,
+                        isSelected: style.presentationKind == option
+                    ) {
+                        update(
+                            timeRange: style.timeRange,
+                            metricKind: style.metricKind,
+                            presentationKind: option
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private func update(
+        timeRange: StatusDisplayStyle.TimeRange,
+        metricKind: StatusDisplayStyle.MetricKind,
+        presentationKind: StatusDisplayStyle.PresentationKind
+    ) {
+        let resolved = StatusDisplayStyle.resolve(
+            timeRange: timeRange,
+            metricKind: metricKind,
+            presentationKind: presentationKind
+        )
+        guard resolved != style else { return }
+        onSelect(resolved)
+    }
+
+    private func axisRow<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 6) {
+                content()
+            }
+        }
     }
 }
 
@@ -410,15 +515,24 @@ struct SourceSummaryGroupView: View {
     let model: SourceSummaryGroupViewModel
     let codexDashboard: CodexDashboardMetrics
     let onToggle: (() -> Void)?
+    let successBadgeColor: Color
+    let useCustomSkin: Bool
+    let customSkinAccentColor: Color
     @Environment(\.colorScheme) private var colorScheme
 
     init(
         model: SourceSummaryGroupViewModel,
         codexDashboard: CodexDashboardMetrics = .empty,
+        successBadgeColor: Color = Color(nsColor: .systemGreen),
+        useCustomSkin: Bool = false,
+        customSkinAccentColor: Color = Color(nsColor: .systemGreen),
         onToggle: (() -> Void)? = nil
     ) {
         self.model = model
         self.codexDashboard = codexDashboard
+        self.successBadgeColor = successBadgeColor
+        self.useCustomSkin = useCustomSkin
+        self.customSkinAccentColor = customSkinAccentColor
         self.onToggle = onToggle
     }
 
@@ -443,16 +557,7 @@ struct SourceSummaryGroupView: View {
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
 
-                    Text(model.statusText)
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(model.statusTone.swiftUIColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(model.statusTone.swiftUIFillColor)
-                        .overlay {
-                            Capsule().stroke(model.statusTone.swiftUIBorderColor, lineWidth: 0.8)
-                        }
-                        .clipShape(Capsule())
+                    statusBadgeText(model.statusText, tone: model.statusTone)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -476,7 +581,12 @@ struct SourceSummaryGroupView: View {
         .padding(.horizontal, 11)
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .summaryDashboardSurface(cornerRadius: 16, colorScheme: colorScheme)
+        .summaryDashboardSurface(
+            cornerRadius: 16,
+            colorScheme: colorScheme,
+            useCustomSkin: useCustomSkin,
+            customAccent: customSkinAccentColor
+        )
     }
 
     private var defaultExpandedContent: some View {
@@ -512,21 +622,18 @@ struct SourceSummaryGroupView: View {
 
                             Spacer(minLength: 6)
 
-                            Text(item.badgeText)
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(item.badgeTone.swiftUIColor)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(item.badgeTone.swiftUIFillColor)
-                                .overlay {
-                                    Capsule().stroke(item.badgeTone.swiftUIBorderColor, lineWidth: 0.8)
-                                }
-                                .clipShape(Capsule())
+                            statusBadgeText(item.badgeText, tone: item.badgeTone)
                         }
                         .padding(.horizontal, 10)
                         .padding(.vertical, 8)
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .summaryDashboardSurface(cornerRadius: 13, colorScheme: colorScheme, elevated: true)
+                        .summaryDashboardSurface(
+                            cornerRadius: 13,
+                            colorScheme: colorScheme,
+                            elevated: true,
+                            useCustomSkin: useCustomSkin,
+                            customAccent: customSkinAccentColor
+                        )
                     }
                 }
             }
@@ -609,16 +716,7 @@ struct SourceSummaryGroupView: View {
                         .lineLimit(1)
 
                     if let badge = model.packageItems.first?.badgeText, !badge.isEmpty {
-                        Text(badge)
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundStyle(model.packageItems.first?.badgeTone.swiftUIColor ?? .secondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 4)
-                            .background(model.packageItems.first?.badgeTone.swiftUIFillColor ?? Color.clear)
-                            .overlay {
-                                Capsule().stroke(model.packageItems.first?.badgeTone.swiftUIBorderColor ?? Color.clear, lineWidth: 0.8)
-                            }
-                            .clipShape(Capsule())
+                        statusBadgeText(badge, tone: model.packageItems.first?.badgeTone ?? .neutral)
                     }
                 }
 
@@ -639,7 +737,13 @@ struct SourceSummaryGroupView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .summaryDashboardSurface(cornerRadius: 13, colorScheme: colorScheme, elevated: true)
+        .summaryDashboardSurface(
+            cornerRadius: 13,
+            colorScheme: colorScheme,
+            elevated: true,
+            useCustomSkin: useCustomSkin,
+            customAccent: customSkinAccentColor
+        )
     }
 
     private func quotaMetricCard(
@@ -677,7 +781,13 @@ struct SourceSummaryGroupView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .summaryDashboardSurface(cornerRadius: 13, colorScheme: colorScheme, elevated: true)
+        .summaryDashboardSurface(
+            cornerRadius: 13,
+            colorScheme: colorScheme,
+            elevated: true,
+            useCustomSkin: useCustomSkin,
+            customAccent: customSkinAccentColor
+        )
     }
 
     @ViewBuilder
@@ -974,883 +1084,41 @@ struct SourceSummaryGroupView: View {
                 .multilineTextAlignment(.leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-        .summaryDashboardSurface(cornerRadius: 13, colorScheme: colorScheme, elevated: true)
-    }
-}
-
-struct LiquidGlassSummaryPanel: View {
-    let model: StatusSummaryViewModel
-    let onTogglePanelMode: (() -> Void)?
-    let onToggleEmail: (() -> Void)?
-    let onRefresh: (() -> Void)?
-    let onSelectStatisticsMode: (() -> Void)?
-    let onSelectSource: (() -> Void)?
-    let onSetAPIKey: (() -> Void)?
-    let onSetAGIKey: (() -> Void)?
-    let onSetInterval: (() -> Void)?
-    let onOpenDashboard: (() -> Void)?
-    let onOpenPricing: (() -> Void)?
-    let onSelectDisplayStyle: ((StatusDisplayStyle) -> Void)?
-    let onToggleSourceGroup: ((PackageSource) -> Void)?
-    let onToggleLaunchAtLogin: ((Bool) -> Void)?
-    let onConfigureMCP: (() -> Void)?
-    let onConfigureStatusColor: (() -> Void)?
-    let onQuit: (() -> Void)?
-    let showsHeaderRow: Bool
-
-    @Namespace private var glassNamespace
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var expandedGroups: Set<StatisticsGroupKind> = Set(StatisticsGroupKind.allCases)
-    @State private var isStatusBarSettingsExpanded = false
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            if showsHeaderRow {
-                headerRow
-            }
-            if model.panelMode == .statistics {
-                statisticsPage
-            } else {
-                settingsPage
-            }
-        }
-        .padding(12)
-        .frame(width: 316)
-        .fixedSize(horizontal: false, vertical: true)
-    }
-
-    private var statisticsPage: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            if model.statisticsDisplayMode == .dual {
-                dualContentPanel
-            } else {
-                metaRow
-                contentPanel
-            }
-        }
-    }
-
-    private var settingsPage: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            settingsHeaderBanner
-            settingsActionPanel
-        }
-    }
-
-    private var settingsHeaderBanner: some View {
-        HStack(spacing: 10) {
-            Label("设置模式", systemImage: "slider.horizontal.3")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.primary)
-
-            Spacer(minLength: 6)
-
-            Text(model.statisticsModeText)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.92)
-        }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentMaterialSurface(cornerRadius: 16, tint: Color.white.opacity(0.20))
-    }
-
-    private var contentPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            heroPanel
-            packageSection
-            progressSection
-        }
-    }
-
-    private var dualContentPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(Array(model.sourceGroups.enumerated()), id: \.element.source.rawValue) { _, group in
-                SourceSummaryGroupView(model: group, codexDashboard: model.codexDashboard) {
-                    onToggleSourceGroup?(group.source)
-                }
-            }
-        }
-    }
-
-    private var headerRow: some View {
-        HStack(alignment: .center, spacing: 8) {
-            HStack(spacing: 8) {
-                Text(model.title)
-                    .font(.system(size: 15, weight: .heavy))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-
-                if model.statisticsDisplayMode == .single {
-                    Text(model.currentSourceTitle)
-                        .font(.system(size: 10.5, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(.thinMaterial)
-                        .clipShape(Capsule())
-                }
-            }
-
-            Spacer(minLength: 6)
-
-            HStack(spacing: 6) {
-                statusBadge(
-                    text: model.statusText,
-                    tone: model.statusTone,
-                    action: isRefreshableStatus(model.statusTone) ? onRefresh : nil
-                )
-
-                if shouldShowHeaderPanelToggle {
-                    Button(action: togglePanelMode) {
-                        Image(systemName: model.panelMode.toggleSymbol)
-                            .font(.system(size: 11.5, weight: .semibold))
-                            .foregroundStyle(.primary)
-                            .frame(width: 30, height: 30)
-                    }
-                    .buttonStyle(.plain)
-                    .modifier(GlassCapsuleModifier(glassNamespace: glassNamespace, id: "panel-mode-toggle"))
-                }
-            }
-        }
-    }
-
-    private var shouldShowHeaderPanelToggle: Bool {
-        model.panelMode == .settings
-            || model.statisticsDisplayMode == .dual
-            || !model.canToggleEmail
-    }
-
-    private var metaRow: some View {
-        EmptyView()
-    }
-
-    private var emailControls: some View {
-        HStack(spacing: 6) {
-            Button(action: { onOpenDashboard?() }) {
-                HStack(spacing: 5) {
-                    Image(systemName: "person")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
-
-                    Text(model.emailText)
-                        .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-                }
-                .fixedSize(horizontal: true, vertical: false)
-            }
-            .buttonStyle(.plain)
-
-            Button(action: { onToggleEmail?() }) {
-                Image(systemName: model.isEmailVisible ? "eye.slash" : "eye")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .frame(width: 18, height: 18)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 9)
-        .frame(height: 26)
-        .fixedSize(horizontal: true, vertical: false)
-        .modifier(GlassCapsuleModifier(glassNamespace: glassNamespace, id: "email-pill"))
-    }
-
-    private var heroPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("套餐剩余额度")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-
-                Text(model.remainingValue)
-                    .font(.system(size: 29, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.78)
-            }
-
-            HStack(alignment: .top, spacing: 8) {
-                compactMetric(
-                    title: model.usageLabel,
-                    value: model.usageValue,
-                    alignment: .leading
-                )
-                .frame(width: 94, alignment: .leading)
-
-                renewalMetricCard
-                .layoutPriority(1)
-            }
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 11)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentMaterialSurface(cornerRadius: 18)
-    }
-
-    @ViewBuilder
-    private var packageSection: some View {
-        if let title = model.packageSectionTitle, !model.packageItems.isEmpty {
-            VStack(alignment: .leading, spacing: 7) {
-                HStack(spacing: 6) {
-                    Text(title)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-
-                    Spacer(minLength: 6)
-
-                    Text("\(model.packageItems.count)")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 7)
-                        .padding(.vertical, 3)
-                        .background(.thinMaterial)
-                        .clipShape(Capsule())
-                }
-
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(Array(model.packageItems.enumerated()), id: \.offset) { _, item in
-                        packageRow(item)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
-
-    private func packageRow(_ item: SummaryPackageItem) -> some View {
-        HStack(alignment: .center, spacing: 10) {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 8) {
-                    Text(item.title)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .lineLimit(1)
-
-                    Spacer(minLength: 8)
-
-                    Text(item.badgeText)
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(item.badgeTone.swiftUIColor)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(item.badgeTone.swiftUIFillColor)
-                        .overlay {
-                            Capsule().stroke(item.badgeTone.swiftUIBorderColor, lineWidth: 0.8)
-                        }
-                        .clipShape(Capsule())
-                }
-
-                Text(item.subtitle)
-                    .font(.system(size: 10.5, weight: .medium, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.84)
-            }
-        }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentMaterialSurface(cornerRadius: 15)
-    }
-
-    @ViewBuilder
-    private var mountedModulesSection: some View {
-        if !model.mountedModules.isEmpty {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(Array(model.mountedModules.enumerated()), id: \.offset) { index, module in
-                    mountedModuleContent(
-                        module,
-                        showsTitle: model.mountedModules.count > 1
-                    )
-
-                    if index < model.mountedModules.count - 1 {
-                        Rectangle()
-                            .fill(Color.white.opacity(0.10))
-                            .frame(height: 1)
-                            .padding(.vertical, 4)
-                    }
-                }
-            }
-        }
-    }
-
-    private func mountedModuleContent(
-        _ module: MountedPackageModuleSummary,
-        showsTitle: Bool
-    ) -> some View {
-        let topMetricMinHeight: CGFloat = 78
-
-        return VStack(alignment: .leading, spacing: 8) {
-            if showsTitle {
-                Text(module.title)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.secondary)
-            }
-
-            HStack(alignment: .top, spacing: 8) {
-                compactMetric(
-                    title: module.remainingLabel,
-                    value: module.remainingValue,
-                    alignment: .leading,
-                    valueFontSize: 16,
-                    valueMinimumScaleFactor: 0.68,
-                    cardMinHeight: topMetricMinHeight
-                )
-
-                compactMetric(
-                    title: module.usageLabel,
-                    value: module.usageValue,
-                    alignment: .leading,
-                    valueFontSize: 11,
-                    valueMinimumScaleFactor: 0.76,
-                    cardMinHeight: topMetricMinHeight
-                )
-            }
-
-            compactMetric(
-                title: module.renewalLabel,
-                value: module.renewalValue,
-                alignment: .leading,
-                valueFontSize: 11,
-                valueMinimumScaleFactor: 0.76
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .summaryDashboardSurface(
+                cornerRadius: 13,
+                colorScheme: colorScheme,
+                elevated: true,
+                useCustomSkin: useCustomSkin,
+                customAccent: customSkinAccentColor
             )
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Text(module.progressLabel)
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(.secondary)
-
-                    Spacer(minLength: 8)
-
-                    Text(module.progressValue)
-                        .font(.system(size: 12.5, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(.primary)
-                }
-
-                GeometryReader { proxy in
-                    let value = module.progress ?? 0
-                    ZStack(alignment: .leading) {
-                        Capsule().fill(.quaternary)
-                        Capsule()
-                            .fill(
-                                LinearGradient(
-                                    colors: [.white.opacity(0.92), .accentColor.opacity(0.42)],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: max(10, proxy.size.width * value))
-                    }
-                }
-                .frame(height: 8)
-            }
-            .padding(.horizontal, 11)
-            .padding(.vertical, 9)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentMaterialSurface(cornerRadius: 15)
-
-            if let packageSectionTitle = module.packageSectionTitle {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(packageSectionTitle)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(Array(module.packageItems.enumerated()), id: \.offset) { _, item in
-                            packageRow(item)
-                        }
-                    }
-                }
-            }
-
-            if !module.footerText.isEmpty {
-                Text(module.footerText)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-        }
     }
 
-    private func statisticsGroup<Content: View>(
-        kind: StatisticsGroupKind,
-        title: String,
-        systemImage: String,
-        accessory: StatisticsGroupAccessory,
-        @ViewBuilder content: () -> Content
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Button(action: { toggleStatisticsGroup(kind) }) {
-                    HStack(spacing: 8) {
-                        Label(title, systemImage: systemImage)
-                            .font(.system(size: 12.5, weight: .bold))
-                            .foregroundStyle(.primary)
-
-                        Spacer(minLength: 8)
-                    }
-                    .padding(.horizontal, 2)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
-                if let tone = accessory.tone {
-                    statusBadge(
-                        text: accessory.text,
-                        tone: tone,
-                        action: isRefreshableStatus(tone) ? onRefresh : nil
-                    )
-                } else {
-                    groupAccessoryChip(accessory.text)
-                }
-
-                Button(action: { toggleStatisticsGroup(kind) }) {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isGroupExpanded(kind) ? 0 : -90))
-                        .frame(width: 18, height: 18)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-
-            if isGroupExpanded(kind) {
-                content()
-                    .transition(.opacity.combined(with: .move(edge: .top)))
-            }
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentMaterialSurface(cornerRadius: 20, tint: Color.white.opacity(0.14))
-    }
-
-    private func groupAccessoryChip(_ text: String) -> some View {
-        Text(text)
+    private func statusBadgeText(_ text: String, tone: SummaryStatusTone) -> some View {
+        let palette = badgePalette(for: tone)
+        return Text(text)
             .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.secondary)
+            .foregroundStyle(palette.text)
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(Color.white.opacity(0.10))
+            .background(palette.fill)
             .overlay {
-                Capsule().stroke(Color.white.opacity(0.22), lineWidth: 0.8)
+                Capsule().stroke(palette.border, lineWidth: 0.8)
             }
             .clipShape(Capsule())
     }
 
-    @ViewBuilder
-    private func statusBadge(
-        text: String,
-        tone: SummaryStatusTone,
-        action: (() -> Void)?
-    ) -> some View {
-        let badge = Text(text)
-            .font(.system(size: 10.5, weight: .semibold))
-            .foregroundStyle(tone.swiftUIColor)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 4.5)
-            .background(tone.swiftUIFillColor)
-            .overlay {
-                Capsule().stroke(tone.swiftUIBorderColor, lineWidth: 0.8)
-            }
-            .clipShape(Capsule())
-
-        if let action {
-            Button(action: action) {
-                badge
-            }
-            .buttonStyle(.plain)
-            .help("状态异常，点击立即刷新")
-        } else {
-            badge
-        }
-    }
-
-    private func isRefreshableStatus(_ tone: SummaryStatusTone) -> Bool {
-        tone == .critical
-    }
-
-    private func isGroupExpanded(_ kind: StatisticsGroupKind) -> Bool {
-        expandedGroups.contains(kind)
-    }
-
-    private func toggleStatisticsGroup(_ kind: StatisticsGroupKind) {
-        let toggle = {
-            if expandedGroups.contains(kind) {
-                expandedGroups.remove(kind)
-            } else {
-                expandedGroups.insert(kind)
-            }
-        }
-
-        if reduceMotion {
-            toggle()
-            return
-        }
-
-        withAnimation(.spring(duration: 0.30, bounce: 0.18)) {
-            toggle()
-        }
-    }
-
-    private var progressSection: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                Text(model.progressLabel)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Spacer(minLength: 8)
-                HStack(spacing: 6) {
-                    if let progressPrefix = model.progressPrefix {
-                        Text(progressPrefix)
-                            .font(.system(size: 11, weight: .medium, design: .rounded))
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.84)
-                    }
-
-                    Text(model.progressValue)
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(.primary)
-                }
-            }
-
-            GeometryReader { proxy in
-                let value = model.progress ?? 0
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(.quaternary)
-                    Capsule()
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    .white.opacity(0.92),
-                                    .accentColor.opacity(0.42)
-                                ],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: max(10, proxy.size.width * value))
-                }
-            }
-            .frame(height: 8)
-        }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 9)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentMaterialSurface(cornerRadius: 15)
-    }
-
-    @ViewBuilder
-    private var settingsActionPanel: some View {
-        settingsControls
-            .padding(.top, 2)
-    }
-
-    private var settingsControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Rectangle()
-                .fill(Color.primary.opacity(0.14))
-                .frame(height: 1)
-                .padding(.bottom, 2)
-
-            MenuActionButton(
-                title: "统计模式",
-                subtitle: model.statisticsModeText,
-                systemImage: "square.split.2x1",
-                prominent: false,
-                action: onSelectStatisticsMode,
-                useInfoCardBackground: true
-            )
-
-            MenuActionButton(
-                title: "单显套餐源",
-                subtitle: model.currentSourceTitle,
-                systemImage: "square.stack.3d.up",
-                prominent: false,
-                action: onSelectSource,
-                useInfoCardBackground: true
-            )
-
-            MenuActionButton(
-                title: "开机自启",
-                subtitle: model.launchAtLoginSupported
-                    ? (model.launchAtLoginEnabled ? "已开启" : "已关闭")
-                    : "仅支持 macOS 13+",
-                systemImage: model.launchAtLoginEnabled ? "power.circle.fill" : "power.circle",
-                prominent: false,
-                action: model.launchAtLoginSupported
-                    ? { onToggleLaunchAtLogin?(!model.launchAtLoginEnabled) }
-                    : nil,
-                useInfoCardBackground: true
-            )
-
-            statusBarSettingsPanel
-
-            MenuActionButton(
-                title: PackageSource.codex.keyButtonTitle,
-                subtitle: model.codexAPIKeyStatusText,
-                systemImage: "key.horizontal",
-                prominent: false,
-                action: onSetAPIKey,
-                useInfoCardBackground: true
-            )
-
-            MenuActionButton(
-                title: PackageSource.agi.keyButtonTitle,
-                subtitle: model.agiAPIKeyStatusText,
-                systemImage: "key.horizontal",
-                prominent: false,
-                action: onSetAGIKey,
-                useInfoCardBackground: true
-            )
-
-            MenuActionButton(
-                title: "轮询间隔",
-                subtitle: model.pollIntervalText,
-                systemImage: "timer",
-                prominent: false,
-                action: onSetInterval,
-                useInfoCardBackground: true
-            )
-
-            MenuActionButton(
-                title: "MCP 服务",
-                subtitle: model.mcpStatusText,
-                systemImage: "server.rack",
-                prominent: false,
-                action: onConfigureMCP,
-                useInfoCardBackground: true
-            )
-
-            MenuActionButton(
-                title: "立即刷新",
-                subtitle: nil,
-                systemImage: "arrow.clockwise",
-                prominent: true,
-                action: onRefresh,
-                useInfoCardBackground: true
-            )
-
-            if model.canOpenDashboard {
-                MenuActionButton(
-                    title: model.dashboardActionTitle,
-                    subtitle: nil,
-                    systemImage: "safari",
-                    prominent: false,
-                    action: onOpenDashboard,
-                    useInfoCardBackground: true
-                )
-            }
-
-            MenuActionButton(
-                title: "退出",
-                subtitle: nil,
-                systemImage: "power",
-                prominent: false,
-                action: onQuit,
-                useInfoCardBackground: true
+    private func badgePalette(for tone: SummaryStatusTone) -> (text: Color, fill: Color, border: Color) {
+        if tone == .success {
+            return (
+                successBadgeColor,
+                successBadgeColor.opacity(0.12),
+                successBadgeColor.opacity(0.22)
             )
         }
-    }
-
-    private var statusBarSettingsPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Button(action: toggleStatusBarSettings) {
-                HStack(spacing: 10) {
-                    Image(systemName: "menubar.rectangle")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 22, height: 22)
-                        .background(Circle().fill(.thinMaterial))
-
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("状态栏")
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-
-                        Text("\(model.displayStyle.chipTitle) · \(model.statusBarColorText)")
-                            .font(.system(size: 10.5, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.86)
-                    }
-
-                    Spacer(minLength: 8)
-
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .rotationEffect(.degrees(isStatusBarSettingsExpanded ? 0 : -90))
-                        .frame(width: 18, height: 18)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentMaterialSurface(cornerRadius: 15, tint: Color.white.opacity(0.12))
-            }
-            .buttonStyle(.plain)
-
-            if isStatusBarSettingsExpanded {
-                VStack(alignment: .leading, spacing: 8) {
-                    MenuActionButton(
-                        title: "文本颜色",
-                        subtitle: model.statusBarColorText,
-                        systemImage: "paintpalette",
-                        prominent: false,
-                        action: onConfigureStatusColor,
-                        useInfoCardBackground: true
-                    )
-
-                    displayStyleSection
-                }
-            }
-        }
-    }
-
-    private var displayStyleSection: some View {
-        VStack(alignment: .leading, spacing: 7) {
-            HStack(spacing: 6) {
-                Text("状态栏样式")
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(.secondary)
-
-                Spacer(minLength: 6)
-
-                Text(model.displayStyle.chipTitle)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.primary)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 3)
-                    .background(Color.white.opacity(0.12))
-                    .overlay {
-                        Capsule().stroke(Color.white.opacity(0.26), lineWidth: 0.8)
-                    }
-                    .clipShape(Capsule())
-            }
-
-            LazyVGrid(
-                columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2),
-                spacing: 8
-            ) {
-                ForEach(StatusDisplayStyle.allCases, id: \.rawValue) { style in
-                    StyleChipButton(
-                        style: style,
-                        isSelected: style == model.displayStyle
-                    ) {
-                        applyDisplayStyle(style)
-                    }
-                }
-            }
-        }
-        .padding(.horizontal, 11)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentMaterialSurface(cornerRadius: 16, tint: Color.white.opacity(0.18))
-    }
-
-    private func applyDisplayStyle(_ style: StatusDisplayStyle) {
-        guard style != model.displayStyle else { return }
-        if reduceMotion {
-            onSelectDisplayStyle?(style)
-            return
-        }
-        withAnimation(.spring(duration: 0.32, bounce: 0.20)) {
-            onSelectDisplayStyle?(style)
-        }
-    }
-
-    private func togglePanelMode() {
-        if reduceMotion {
-            onTogglePanelMode?()
-            return
-        }
-        withAnimation(.spring(duration: 0.28, bounce: 0.15)) {
-            onTogglePanelMode?()
-        }
-    }
-
-    private func toggleStatusBarSettings() {
-        isStatusBarSettingsExpanded.toggle()
-    }
-
-    private func compactMetric(
-        title: String,
-        value: String,
-        alignment: HorizontalAlignment,
-        valueFontSize: CGFloat = 12,
-        valueLineLimit: Int = 1,
-        valueMinimumScaleFactor: CGFloat = 0.72,
-        cardMinHeight: CGFloat = 0
-    ) -> some View {
-        VStack(alignment: alignment, spacing: 3) {
-            Text(title)
-                .font(.system(size: 9.5, weight: .medium))
-                .foregroundStyle(.secondary)
-
-            Text(value)
-                .font(.system(size: valueFontSize, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(.primary)
-                .lineLimit(valueLineLimit)
-                .minimumScaleFactor(valueMinimumScaleFactor)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, minHeight: cardMinHeight, alignment: .leading)
-        .contentMaterialSurface(cornerRadius: 14)
-    }
-
-    private var renewalMetricCard: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(model.renewalLabel)
-                    .font(.system(size: 9.5, weight: .medium))
-                    .foregroundStyle(.secondary)
-
-                Spacer(minLength: 4)
-
-                if model.canOpenPricing {
-                    Button(action: { onOpenPricing?() }) {
-                        Text("去续费")
-                            .font(.system(size: 10.5, weight: .semibold))
-                            .foregroundStyle(.green)
-                            .lineLimit(1)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            Text(model.renewalValue)
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
-                .monospacedDigit()
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.72)
-                .multilineTextAlignment(.leading)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .contentMaterialSurface(cornerRadius: 14)
+        return (tone.swiftUIColor, tone.swiftUIFillColor, tone.swiftUIBorderColor)
     }
 }
 
@@ -1882,19 +1150,17 @@ struct MonitorDashboardShellView: View {
     let onTogglePanelMode: (() -> Void)?
     let onToggleEmail: (() -> Void)?
     let onRefresh: (() -> Void)?
-    let onSelectStatisticsMode: (() -> Void)?
-    let onSelectSource: (() -> Void)?
-    let onSetAPIKey: (() -> Void)?
-    let onSetAGIKey: (() -> Void)?
-    let onSetInterval: (() -> Void)?
+    let onSelectStatisticsMode: ((StatisticsDisplayMode) -> Void)?
+    let onSelectSource: ((PackageSource) -> Void)?
+    let onSetAPIKey: ((PackageSource, String) -> Void)?
+    let onSetInterval: ((Double) -> Void)?
     let onOpenDashboard: (() -> Void)?
     let onOpenPricing: (() -> Void)?
     let onSelectDisplayStyle: ((StatusDisplayStyle) -> Void)?
     let onToggleSourceGroup: ((PackageSource) -> Void)?
     let onToggleLaunchAtLogin: ((Bool) -> Void)?
-    let onConfigureMCP: (() -> Void)?
-    let onConfigureStatusColor: (() -> Void)?
-    let onQuit: (() -> Void)?
+    let onConfigureMCP: ((Bool, UInt16) -> Void)?
+    let onSetStatusBarColor: ((StatusBarForegroundMode, String) -> Void)?
     let onSelectUsageLogsPage: ((Int) -> Void)?
     let onOpenUsageLogDetail: ((String) -> Void)?
 
@@ -1902,6 +1168,14 @@ struct MonitorDashboardShellView: View {
     @State private var selectedTab: DashboardTab = .usageOverview
     @State private var isCodexPanelExpanded = true
     @State private var isStatusBarSettingsExpanded = false
+    @State private var codexAPIKeyDraft = ""
+    @State private var agiAPIKeyDraft = ""
+    @FocusState private var focusedAPIKeyField: APIKeyInputField?
+    @State private var intervalSecondsDraft = 5
+    @State private var mcpEnabledDraft = false
+    @State private var mcpPortDraft = "\(AppMeta.defaultMCPPort)"
+    @State private var statusBarAutoAdaptDraft = true
+    @State private var statusBarManualColorDraft = Color.white
     @State private var isSkinSettingsPageVisible = false
     @State private var selectedSkinSourceRawValue = SkinSourceOption.official.rawValue
     @AppStorage("skin_theme_option") private var selectedSkinThemeRawValue = SkinThemeOption.defaultFollowSystem.rawValue
@@ -1923,6 +1197,11 @@ struct MonitorDashboardShellView: View {
                 return "自定义换肤"
             }
         }
+    }
+
+    private enum APIKeyInputField: Hashable {
+        case codex
+        case agi
     }
 
     private enum SkinThemeOption: String, CaseIterable, Identifiable {
@@ -1997,6 +1276,14 @@ struct MonitorDashboardShellView: View {
 
     private var themeAccentColor: Color {
         isCustomSkinSelected ? customSkinColor : Color(hex: 0xEF4B4B)
+    }
+
+    private var settingsAccentColor: Color {
+        isCustomSkinSelected ? themeAccentColor : Color(nsColor: .systemGreen)
+    }
+
+    private var successBadgeColor: Color {
+        isCustomSkinSelected ? customSkinColor : Color(nsColor: .systemGreen)
     }
 
     private var visibleThemeAccentColor: Color {
@@ -2188,6 +1475,7 @@ struct MonitorDashboardShellView: View {
                 Spacer(minLength: 10)
                 topBarAccountCapsule
 
+                topBarIconButton(systemImage: "arrow.clockwise", action: onRefresh)
                 topBarIconButton(systemImage: "gearshape", action: handleSettingsButton)
                 topBarIconButton(
                     systemImage: "tshirt",
@@ -2677,7 +1965,13 @@ struct MonitorDashboardShellView: View {
         VStack(alignment: .leading, spacing: 12) {
             if model.statisticsDisplayMode == .dual {
                 ForEach(model.sourceGroups, id: \.source.rawValue) { group in
-                    SourceSummaryGroupView(model: group, codexDashboard: model.codexDashboard) {
+                    SourceSummaryGroupView(
+                        model: group,
+                        codexDashboard: model.codexDashboard,
+                        successBadgeColor: successBadgeColor,
+                        useCustomSkin: isCustomSkinSelected,
+                        customSkinAccentColor: customSkinColor
+                    ) {
                         onToggleSourceGroup?(group.source)
                     }
                 }
@@ -2685,7 +1979,10 @@ struct MonitorDashboardShellView: View {
                 if let group = singleModeSourceGroup {
                     SourceSummaryGroupView(
                         model: group,
-                        codexDashboard: group.source == .codex ? model.codexDashboard : .empty
+                        codexDashboard: group.source == .codex ? model.codexDashboard : .empty,
+                        successBadgeColor: successBadgeColor,
+                        useCustomSkin: isCustomSkinSelected,
+                        customSkinAccentColor: customSkinColor
                     ) {
                         onToggleSourceGroup?(group.source)
                     }
@@ -2705,125 +2002,370 @@ struct MonitorDashboardShellView: View {
 
     private var settingsPage: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                Label("设置模式", systemImage: "slider.horizontal.3")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(.primary)
-                Spacer(minLength: 6)
-                Text(model.statisticsModeText)
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(isDarkTheme ? Color.white.opacity(0.05) : Color.white)
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(separatorColor, lineWidth: 1)
+            inlineSettingCard(title: "统计模式", systemImage: "square.split.2x1") {
+                Picker("", selection: Binding(
+                    get: { model.statisticsDisplayMode },
+                    set: { onSelectStatisticsMode?($0) }
+                )) {
+                    ForEach(StatisticsDisplayMode.allCases, id: \.rawValue) { mode in
+                        Text(mode.fullTitle).tag(mode)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 122)
             }
 
-            MenuActionButton(
-                title: "统计模式",
-                subtitle: model.statisticsModeText,
-                systemImage: "square.split.2x1",
-                prominent: false,
-                action: onSelectStatisticsMode,
-                useInfoCardBackground: true
-            )
+            inlineSettingCard(title: "单显套餐源", systemImage: "square.stack.3d.up") {
+                Picker("", selection: Binding(
+                    get: { model.currentSource },
+                    set: { onSelectSource?($0) }
+                )) {
+                    ForEach(PackageSource.allCases, id: \.rawValue) { source in
+                        Text(source.title).tag(source)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 122)
+            }
 
-            MenuActionButton(
-                title: "单显套餐源",
-                subtitle: model.currentSourceTitle,
-                systemImage: "square.stack.3d.up",
-                prominent: false,
-                action: onSelectSource,
-                useInfoCardBackground: true
-            )
-
-            MenuActionButton(
-                title: "开机自启",
-                subtitle: model.launchAtLoginSupported
-                    ? (model.launchAtLoginEnabled ? "已开启" : "已关闭")
-                    : "仅支持 macOS 13+",
-                systemImage: model.launchAtLoginEnabled ? "power.circle.fill" : "power.circle",
-                prominent: false,
-                action: model.launchAtLoginSupported
-                    ? { onToggleLaunchAtLogin?(!model.launchAtLoginEnabled) }
-                    : nil,
-                useInfoCardBackground: true
-            )
+            launchAtLoginSettingCard
 
             statusBarSettingsPanel
 
-            MenuActionButton(
+            keySettingCard(
                 title: PackageSource.codex.keyButtonTitle,
-                subtitle: model.codexAPIKeyStatusText,
-                systemImage: "key.horizontal",
-                prominent: false,
-                action: onSetAPIKey,
-                useInfoCardBackground: true
-            )
-
-            MenuActionButton(
-                title: PackageSource.agi.keyButtonTitle,
-                subtitle: model.agiAPIKeyStatusText,
-                systemImage: "key.horizontal",
-                prominent: false,
-                action: onSetAGIKey,
-                useInfoCardBackground: true
-            )
-
-            MenuActionButton(
-                title: "轮询间隔",
-                subtitle: model.pollIntervalText,
-                systemImage: "timer",
-                prominent: false,
-                action: onSetInterval,
-                useInfoCardBackground: true
-            )
-
-            MenuActionButton(
-                title: "MCP 服务",
-                subtitle: model.mcpStatusText,
-                systemImage: "server.rack",
-                prominent: false,
-                action: onConfigureMCP,
-                useInfoCardBackground: true
-            )
-
-            MenuActionButton(
-                title: "立即刷新",
-                subtitle: nil,
-                systemImage: "arrow.clockwise",
-                prominent: true,
-                action: onRefresh,
-                useInfoCardBackground: true
-            )
-
-            if model.canOpenDashboard {
-                MenuActionButton(
-                    title: model.dashboardActionTitle,
-                    subtitle: nil,
-                    systemImage: "safari",
-                    prominent: false,
-                    action: onOpenDashboard,
-                    useInfoCardBackground: true
-                )
+                statusText: model.codexAPIKeyStatusText,
+                maskedText: model.codexAPIKeyMaskedText,
+                placeholder: "粘贴 Codex API Key",
+                field: .codex,
+                text: $codexAPIKeyDraft,
+                onClear: { clearAPIKey(for: .codex) }
+            ) {
+                saveAPIKey(for: .codex, draft: codexAPIKeyDraft)
             }
 
-            MenuActionButton(
-                title: "退出",
-                subtitle: nil,
-                systemImage: "power",
-                prominent: false,
-                action: onQuit,
-                useInfoCardBackground: true
-            )
+            keySettingCard(
+                title: PackageSource.agi.keyButtonTitle,
+                statusText: model.agiAPIKeyStatusText,
+                maskedText: model.agiAPIKeyMaskedText,
+                placeholder: "粘贴 AGI API Key",
+                field: .agi,
+                text: $agiAPIKeyDraft,
+                onClear: { clearAPIKey(for: .agi) }
+            ) {
+                saveAPIKey(for: .agi, draft: agiAPIKeyDraft)
+            }
+
+            inlineSettingCard(title: "轮询间隔", systemImage: "timer") {
+                Picker("", selection: $intervalSecondsDraft) {
+                    ForEach([3, 5, 10, 15, 30, 60], id: \.self) { value in
+                        Text("\(value) 秒").tag(value)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 96)
+                .onChange(of: intervalSecondsDraft) { newValue in
+                    onSetInterval?(Double(newValue))
+                }
+            }
+
+            mcpSettingCard
+
         }
+        .tint(settingsAccentColor)
+        .onAppear {
+            syncSettingsDraftFromModel()
+        }
+    }
+
+    private var launchAtLoginSettingCard: some View {
+        let isSupported = model.launchAtLoginSupported
+        let reasonText = model.launchAtLoginUnavailableReason ?? ""
+        let showReason = !isSupported && !reasonText.isEmpty
+        let cardFill: Color = isSupported
+            ? (isDarkTheme ? Color.white.opacity(0.05) : Color.white)
+            : Color.orange.opacity(0.06)
+        let cardStroke: Color = isSupported ? separatorColor : Color.orange.opacity(0.38)
+        let iconColor: Color = isSupported ? .secondary : .orange
+
+        return VStack(alignment: .leading, spacing: showReason ? 7 : 0) {
+            HStack(spacing: 10) {
+                Image(systemName: model.launchAtLoginEnabled ? "power.circle.fill" : "power.circle")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(iconColor)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(.thinMaterial))
+
+                Text("开机自启")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(isSupported ? .primary : .secondary)
+
+                if !isSupported {
+                    Text("不可用")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Color.orange.opacity(0.14))
+                        .overlay {
+                            Capsule().stroke(Color.orange.opacity(0.36), lineWidth: 0.8)
+                        }
+                        .clipShape(Capsule())
+                }
+
+                Spacer(minLength: 8)
+
+                Toggle(
+                    "",
+                    isOn: Binding(
+                        get: { model.launchAtLoginEnabled && isSupported },
+                        set: { onToggleLaunchAtLogin?($0) }
+                    )
+                )
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .disabled(!isSupported)
+            }
+
+            if showReason {
+                Text(reasonText)
+                    .font(.system(size: 10.5, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(cardFill)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .stroke(cardStroke, lineWidth: 1)
+        }
+        .help(showReason ? reasonText : "支持开启开机自启")
+    }
+
+    private func inlineSettingCard<Control: View>(
+        title: String,
+        systemImage: String,
+        @ViewBuilder control: () -> Control
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(.thinMaterial))
+
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.primary)
+
+            Spacer(minLength: 8)
+
+            control()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(isDarkTheme ? Color.white.opacity(0.05) : Color.white)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .stroke(separatorColor, lineWidth: 1)
+        }
+    }
+
+    private func keySettingCard(
+        title: String,
+        statusText: String,
+        maskedText: String,
+        placeholder: String,
+        field: APIKeyInputField,
+        text: Binding<String>,
+        onClear: @escaping () -> Void,
+        onSave: @escaping () -> Void
+    ) -> some View {
+        let isConfigured = statusText == "已配置"
+        let displayText = Binding<String>(
+            get: {
+                let draft = text.wrappedValue
+                if isConfigured,
+                   focusedAPIKeyField != field,
+                   draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                   !maskedText.isEmpty {
+                    return maskedText
+                }
+                return draft
+            },
+            set: { newValue in
+                text.wrappedValue = newValue
+            }
+        )
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "key.horizontal")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(.thinMaterial))
+
+                Text(title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.primary)
+
+                Text(statusText)
+                    .font(.system(size: 10.5, weight: .semibold))
+                    .foregroundStyle(isConfigured ? successBadgeColor : .secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(isConfigured ? successBadgeColor.opacity(0.12) : Color.white.opacity(0.10))
+                    .overlay {
+                        if isConfigured {
+                            Capsule().stroke(successBadgeColor.opacity(0.22), lineWidth: 0.8)
+                        }
+                    }
+                    .clipShape(Capsule())
+
+                Spacer(minLength: 8)
+
+                if isConfigured {
+                    Button("清空") {
+                        onClear()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                }
+            }
+
+            HStack(spacing: 8) {
+                SecureField(placeholder, text: displayText)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12, weight: .medium))
+                    .focused($focusedAPIKeyField, equals: field)
+                    .onTapGesture {
+                        if isConfigured, text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            text.wrappedValue = ""
+                        }
+                    }
+                    .onSubmit(onSave)
+
+                Button("保存") {
+                    onSave()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+                .disabled(text.wrappedValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(isDarkTheme ? Color.white.opacity(0.05) : Color.white)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .stroke(separatorColor, lineWidth: 1)
+        }
+    }
+
+    private var mcpSettingCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: "server.rack")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(.thinMaterial))
+
+                Text("MCP 服务")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.primary)
+
+                Spacer(minLength: 8)
+
+                Toggle("", isOn: $mcpEnabledDraft)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+            }
+
+            HStack(spacing: 8) {
+                Text("端口")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+
+                TextField("8765", text: $mcpPortDraft)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(width: 92)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+
+                Button("应用") {
+                    applyMCPSettings()
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
+
+                Spacer(minLength: 8)
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .fill(isDarkTheme ? Color.white.opacity(0.05) : Color.white)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .stroke(separatorColor, lineWidth: 1)
+        }
+        .onChange(of: mcpEnabledDraft) { _ in
+            applyMCPSettings()
+        }
+    }
+
+    private func saveAPIKey(for source: PackageSource, draft: String) {
+        let normalized = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return }
+        onSetAPIKey?(source, normalized)
+        if source == .codex {
+            codexAPIKeyDraft = ""
+        } else {
+            agiAPIKeyDraft = ""
+        }
+    }
+
+    private func clearAPIKey(for source: PackageSource) {
+        onSetAPIKey?(source, "")
+        if source == .codex {
+            codexAPIKeyDraft = ""
+        } else {
+            agiAPIKeyDraft = ""
+        }
+    }
+
+    private func applyMCPSettings() {
+        let port = UInt16(mcpPortDraft.trimmingCharacters(in: .whitespacesAndNewlines)) ?? model.mcpPort
+        onConfigureMCP?(mcpEnabledDraft, max(UInt16(1), port))
+    }
+
+    private func syncSettingsDraftFromModel() {
+        intervalSecondsDraft = max(1, Int(model.pollIntervalSeconds.rounded()))
+        mcpEnabledDraft = model.mcpEnabled
+        mcpPortDraft = "\(model.mcpPort)"
+        statusBarAutoAdaptDraft = model.statusBarForegroundMode == .autoAdapt
+        statusBarManualColorDraft = colorFromHex(model.statusBarManualColorHex) ?? .white
     }
 
     private var statusBarSettingsPanel: some View {
@@ -2871,27 +2413,63 @@ struct MonitorDashboardShellView: View {
             .buttonStyle(.plain)
 
             if isStatusBarSettingsExpanded {
-                MenuActionButton(
-                    title: "文本颜色",
-                    subtitle: model.statusBarColorText,
-                    systemImage: "paintpalette",
-                    prominent: false,
-                    action: onConfigureStatusColor,
-                    useInfoCardBackground: true
-                )
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "paintpalette")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
 
-                LazyVGrid(
-                    columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 2),
-                    spacing: 8
-                ) {
-                    ForEach(StatusDisplayStyle.allCases, id: \.rawValue) { style in
-                        StyleChipButton(
-                            style: style,
-                            isSelected: style == model.displayStyle
-                        ) {
-                            onSelectDisplayStyle?(style)
-                        }
+                        Text("文本颜色")
+                            .font(.system(size: 12.5, weight: .bold))
+                            .foregroundStyle(.primary)
+
+                        Spacer(minLength: 8)
+
+                        Text(model.statusBarColorText)
+                            .font(.system(size: 10.5, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
                     }
+
+                    Toggle("自动适配状态栏背景", isOn: $statusBarAutoAdaptDraft)
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .onChange(of: statusBarAutoAdaptDraft) { _ in
+                            applyStatusBarColorSettings()
+                        }
+
+                    HStack(spacing: 8) {
+                        Text("手动颜色")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+
+                        ColorPicker("", selection: $statusBarManualColorDraft, supportsOpacity: false)
+                            .labelsHidden()
+                            .disabled(statusBarAutoAdaptDraft)
+                            .onChange(of: statusBarManualColorDraft) { _ in
+                                applyStatusBarColorSettings()
+                            }
+
+                        Text(statusBarManualColorHexText)
+                            .font(.system(size: 11.5, weight: .semibold, design: .monospaced))
+                            .foregroundStyle(statusBarAutoAdaptDraft ? .tertiary : .secondary)
+
+                        Spacer(minLength: 8)
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .fill(isDarkTheme ? Color.white.opacity(0.05) : Color.white)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 15, style: .continuous)
+                        .stroke(separatorColor, lineWidth: 1)
+                }
+
+                StatusStyleQuickPicker(style: model.displayStyle) { style in
+                    onSelectDisplayStyle?(style)
                 }
                 .padding(.horizontal, 4)
                 .padding(.vertical, 2)
@@ -2930,6 +2508,36 @@ struct MonitorDashboardShellView: View {
                 codexExpandedLayout
             }
         }
+    }
+
+    private var statusBarManualColorHexText: String {
+        let nsColor = NSColor(statusBarManualColorDraft).usingColorSpace(.sRGB)
+            ?? NSColor(statusBarManualColorDraft).usingColorSpace(.deviceRGB)
+            ?? .white
+        let red = Int(round(nsColor.redComponent * 255))
+        let green = Int(round(nsColor.greenComponent * 255))
+        let blue = Int(round(nsColor.blueComponent * 255))
+        return String(format: "#%02X%02X%02X", red, green, blue)
+    }
+
+    private func applyStatusBarColorSettings() {
+        let mode: StatusBarForegroundMode = statusBarAutoAdaptDraft ? .autoAdapt : .manual
+        let manualHex = statusBarManualColorHexText
+        guard mode != model.statusBarForegroundMode
+            || manualHex != model.statusBarManualColorHex else { return }
+        onSetStatusBarColor?(mode, manualHex)
+    }
+
+    private func colorFromHex(_ rawValue: String) -> Color? {
+        var value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("#") {
+            value.removeFirst()
+        }
+        guard value.count == 6, let hex = UInt32(value, radix: 16) else { return nil }
+        let red = Double((hex >> 16) & 0xFF) / 255
+        let green = Double((hex >> 8) & 0xFF) / 255
+        let blue = Double(hex & 0xFF) / 255
+        return Color(red: red, green: green, blue: blue)
     }
 
     private var codexExpandedLayout: some View {
@@ -3509,11 +3117,14 @@ struct MonitorDashboardShellView: View {
             }) {
                 Text("明细")
                     .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(Color(hex: 0x57BF71))
+                    .foregroundStyle(successBadgeColor)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color(hex: 0x57BF71).opacity(0.14))
-                    .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                    .background(successBadgeColor.opacity(0.12))
+                    .overlay {
+                        Capsule().stroke(successBadgeColor.opacity(0.22), lineWidth: 0.8)
+                    }
+                    .clipShape(Capsule())
             }
             .buttonStyle(.plain)
             .frame(width: 52, alignment: .trailing)
@@ -3526,11 +3137,14 @@ struct MonitorDashboardShellView: View {
         if resolvedCount > 0 {
             Text("共 \(resolvedCount.formatted()) 条")
                 .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Color(hex: 0x57BF71))
+                .foregroundStyle(successBadgeColor)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 6)
-                .background(Color(hex: 0x57BF71).opacity(0.16))
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .background(successBadgeColor.opacity(0.12))
+                .overlay {
+                    Capsule().stroke(successBadgeColor.opacity(0.22), lineWidth: 0.8)
+                }
+                .clipShape(Capsule())
         }
     }
 
@@ -3777,28 +3391,6 @@ struct MonitorDashboardShellView: View {
     private static let largeIntegerRegex = try? NSRegularExpression(pattern: #"(?<![\d.])\d{4,}(?![\d.])"#)
 }
 
-struct GlassCapsuleModifier: ViewModifier {
-    let glassNamespace: Namespace.ID
-    let id: String
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        #if compiler(>=6.2)
-        if #available(macOS 26.0, *) {
-            content
-                .glassEffect()
-                .glassEffectID(id, in: glassNamespace)
-        } else {
-            content
-                .liquidGlassCapsule()
-        }
-        #else
-        content
-            .liquidGlassCapsule()
-        #endif
-    }
-}
-
 final class StatusSummaryView: NSView {
     static let preferredWidth: CGFloat = 1008
     static let preferredHeight: CGFloat = 647
@@ -3812,19 +3404,16 @@ final class StatusSummaryView: NSView {
     var onRefresh: (() -> Void)? {
         didSet { updateRootView() }
     }
-    var onSelectStatisticsMode: (() -> Void)? {
+    var onSelectStatisticsMode: ((StatisticsDisplayMode) -> Void)? {
         didSet { updateRootView() }
     }
-    var onSelectSource: (() -> Void)? {
+    var onSelectSource: ((PackageSource) -> Void)? {
         didSet { updateRootView() }
     }
-    var onSetAPIKey: (() -> Void)? {
+    var onSetAPIKey: ((PackageSource, String) -> Void)? {
         didSet { updateRootView() }
     }
-    var onSetAGIKey: (() -> Void)? {
-        didSet { updateRootView() }
-    }
-    var onSetInterval: (() -> Void)? {
+    var onSetInterval: ((Double) -> Void)? {
         didSet { updateRootView() }
     }
     var onOpenDashboard: (() -> Void)? {
@@ -3842,13 +3431,10 @@ final class StatusSummaryView: NSView {
     var onToggleLaunchAtLogin: ((Bool) -> Void)? {
         didSet { updateRootView() }
     }
-    var onConfigureMCP: (() -> Void)? {
+    var onConfigureMCP: ((Bool, UInt16) -> Void)? {
         didSet { updateRootView() }
     }
-    var onConfigureStatusColor: (() -> Void)? {
-        didSet { updateRootView() }
-    }
-    var onQuit: (() -> Void)? {
+    var onSetStatusBarColor: ((StatusBarForegroundMode, String) -> Void)? {
         didSet { updateRootView() }
     }
     var onSelectUsageLogsPage: ((Int) -> Void)? {
@@ -3876,7 +3462,6 @@ final class StatusSummaryView: NSView {
                 onSelectStatisticsMode: nil,
                 onSelectSource: nil,
                 onSetAPIKey: nil,
-                onSetAGIKey: nil,
                 onSetInterval: nil,
                 onOpenDashboard: nil,
                 onOpenPricing: nil,
@@ -3884,8 +3469,7 @@ final class StatusSummaryView: NSView {
                 onToggleSourceGroup: nil,
                 onToggleLaunchAtLogin: nil,
                 onConfigureMCP: nil,
-                onConfigureStatusColor: nil,
-                onQuit: nil,
+                onSetStatusBarColor: nil,
                 onSelectUsageLogsPage: nil,
                 onOpenUsageLogDetail: nil
             )
@@ -3926,7 +3510,6 @@ final class StatusSummaryView: NSView {
             onSelectStatisticsMode: onSelectStatisticsMode,
             onSelectSource: onSelectSource,
             onSetAPIKey: onSetAPIKey,
-            onSetAGIKey: onSetAGIKey,
             onSetInterval: onSetInterval,
             onOpenDashboard: onOpenDashboard,
             onOpenPricing: onOpenPricing,
@@ -3934,8 +3517,7 @@ final class StatusSummaryView: NSView {
             onToggleSourceGroup: onToggleSourceGroup,
             onToggleLaunchAtLogin: onToggleLaunchAtLogin,
             onConfigureMCP: onConfigureMCP,
-            onConfigureStatusColor: onConfigureStatusColor,
-            onQuit: onQuit,
+            onSetStatusBarColor: onSetStatusBarColor,
             onSelectUsageLogsPage: onSelectUsageLogsPage,
             onOpenUsageLogDetail: onOpenUsageLogDetail
         )

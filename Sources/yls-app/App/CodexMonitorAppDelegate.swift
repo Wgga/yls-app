@@ -29,15 +29,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
     }
     private let toolbarIdentifier = NSToolbar.Identifier("com.yls.codex-monitor.window-toolbar")
 
-    private var supportsLaunchAtLogin: Bool {
-        if #available(macOS 13.0, *) {
-            return true
+    private var launchAtLoginUnsupportedReason: String? {
+        guard #available(macOS 13.0, *) else {
+            return "仅支持 macOS 13 或更高版本。"
         }
-        return false
+        let bundlePath = Bundle.main.bundleURL.path
+        guard bundlePath.hasSuffix(".app") else {
+            return "当前运行环境不是 .app 包，无法启用开机自启。"
+        }
+        if bundlePath.contains("/.build/") || bundlePath.contains("/DerivedData/") {
+            return "调试构建不支持开机自启，请使用导出的 .app 再开启。"
+        }
+        return nil
+    }
+
+    private var supportsLaunchAtLogin: Bool {
+        launchAtLoginUnsupportedReason == nil
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.regular)
+        setupMainMenu()
         bindStore()
         store.loadConfiguration()
         syncLaunchAtLoginOnStartup()
@@ -49,6 +61,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         mcpSnapshotStore.set(makeMCPSnapshotData())
         showMainWindow()
         store.refreshNow()
+    }
+
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appMenuItem = NSMenuItem()
+        mainMenu.addItem(appMenuItem)
+
+        let appMenu = NSMenu()
+        appMenuItem.submenu = appMenu
+        appMenu.addItem(withTitle: "关于 \(AppMeta.displayName)", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "隐藏 \(AppMeta.displayName)", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "隐藏其他", action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h")
+            .keyEquivalentModifierMask = [.command, .option]
+        appMenu.addItem(withTitle: "显示全部", action: #selector(NSApplication.unhideAllApplications(_:)), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "退出 \(AppMeta.displayName)", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+
+        let editMenuItem = NSMenuItem()
+        mainMenu.addItem(editMenuItem)
+
+        let editMenu = NSMenu(title: "编辑")
+        editMenuItem.submenu = editMenu
+        editMenu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "重做", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "复制", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+
+        NSApp.mainMenu = mainMenu
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -93,29 +138,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 self?.store.refreshNow()
             }
         }
-        summaryView.onSelectStatisticsMode = { [weak self] in
+        summaryView.onSelectStatisticsMode = { [weak self] mode in
             self?.performMenuAction {
-                self?.handleSelectStatisticsMode()
+                self?.store.selectStatisticsDisplayMode(mode)
             }
         }
-        summaryView.onSelectSource = { [weak self] in
+        summaryView.onSelectSource = { [weak self] source in
             self?.performMenuAction {
-                self?.handleSelectSource()
+                self?.store.selectSource(source)
             }
         }
-        summaryView.onSetAPIKey = { [weak self] in
+        summaryView.onSetAPIKey = { [weak self] source, token in
             self?.performMenuAction {
-                self?.handleSetAPIKey()
+                self?.store.setAPIKey(token, for: source)
             }
         }
-        summaryView.onSetAGIKey = { [weak self] in
+        summaryView.onSetInterval = { [weak self] seconds in
             self?.performMenuAction {
-                self?.handleSetAGIKey()
-            }
-        }
-        summaryView.onSetInterval = { [weak self] in
-            self?.performMenuAction {
-                self?.handleSetInterval()
+                guard let self else { return }
+                guard self.store.setPollInterval(seconds) else {
+                    self.showError("轮询间隔必须 >= 1 秒")
+                    return
+                }
+                self.startPolling()
             }
         }
         summaryView.onOpenDashboard = { [weak self] in
@@ -145,21 +190,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             self?.store.toggleSourceGroup(source)
         }
         summaryView.onToggleLaunchAtLogin = { [weak self] enabled in
-            self?.setLaunchAtLogin(enabled)
-        }
-        summaryView.onConfigureMCP = { [weak self] in
             self?.performMenuAction {
-                self?.handleConfigureMCP()
+                self?.setLaunchAtLogin(enabled)
             }
         }
-        summaryView.onConfigureStatusColor = { [weak self] in
+        summaryView.onConfigureMCP = { [weak self] enabled, port in
             self?.performMenuAction {
-                self?.handleConfigureStatusColor()
+                guard let self else { return }
+                self.store.setMCPConfiguration(enabled: enabled, port: port)
+                self.restartMCPIfNeeded()
+                self.renderSummaryView()
             }
         }
-        summaryView.onQuit = { [weak self] in
+        summaryView.onSetStatusBarColor = { [weak self] mode, manualColorHex in
             self?.performMenuAction {
-                self?.handleQuit()
+                guard let self else { return }
+                let color = Self.colorFromHexString(manualColorHex) ?? self.store.statusBarManualColor
+                self.store.setStatusBarColor(mode: mode, color: color)
             }
         }
         renderSummaryView()
@@ -215,48 +262,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     @objc private func handleOpenMainWindow() {
         showMainWindow()
-    }
-
-    private func handleSelectStatisticsMode() {
-        let alert = NSAlert()
-        alert.messageText = "选择统计模式"
-        alert.informativeText = "单显显示当前套餐源；双显会同时显示 Codex 和 AGI 两组统计，状态栏默认优先显示 Codex。"
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "保存")
-        alert.addButton(withTitle: "取消")
-
-        let selector = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 220, height: 28), pullsDown: false)
-        StatisticsDisplayMode.allCases.forEach { mode in
-            selector.addItem(withTitle: mode.fullTitle)
-        }
-        selector.selectItem(at: StatisticsDisplayMode.allCases.firstIndex(of: store.statisticsDisplayMode) ?? 0)
-        alert.accessoryView = selector
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        store.selectStatisticsDisplayMode(StatisticsDisplayMode.allCases[selector.indexOfSelectedItem])
-    }
-
-    private func handleSelectSource() {
-        let alert = NSAlert()
-        alert.messageText = "选择单显套餐源"
-        alert.informativeText = "单显模式下的统计面板会跟随当前选择的数据源；双显模式下仍会同时展示 Codex 和 AGI。"
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "保存")
-        alert.addButton(withTitle: "取消")
-
-        let selector = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 220, height: 28), pullsDown: false)
-        PackageSource.allCases.forEach { source in
-            selector.addItem(withTitle: source.title)
-        }
-        selector.selectItem(at: PackageSource.allCases.firstIndex(of: store.currentSource) ?? 0)
-        alert.accessoryView = selector
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        store.selectSource(PackageSource.allCases[selector.indexOfSelectedItem])
     }
 
     private func popUpStatusMenu(_ menu: NSMenu) {
@@ -330,66 +335,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         store.refreshNow()
     }
 
-    @objc private func handleSetAPIKey() {
-        let alert = NSAlert()
-        alert.messageText = PackageSource.codex.apiKeyDialogTitle
-        alert.informativeText = PackageSource.codex.apiKeyDialogHint
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "保存")
-        alert.addButton(withTitle: "取消")
-
-        let input = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-        input.stringValue = store.apiKey
-        alert.accessoryView = input
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        store.setAPIKey(input.stringValue)
-    }
-
-    @objc private func handleSetAGIKey() {
-        let alert = NSAlert()
-        alert.messageText = PackageSource.agi.apiKeyDialogTitle
-        alert.informativeText = PackageSource.agi.apiKeyDialogHint
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "保存")
-        alert.addButton(withTitle: "取消")
-
-        let input = NSSecureTextField(frame: NSRect(x: 0, y: 0, width: 320, height: 24))
-        input.stringValue = store.agiAPIKey
-        alert.accessoryView = input
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        store.setAGIKey(input.stringValue)
-    }
-
-    @objc private func handleSetInterval() {
-        let alert = NSAlert()
-        alert.messageText = "设置轮询间隔（秒）"
-        alert.informativeText = "建议 >= 3 秒"
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "保存")
-        alert.addButton(withTitle: "取消")
-
-        let input = NSTextField(frame: NSRect(x: 0, y: 0, width: 160, height: 24))
-        input.placeholderString = "例如 5"
-        input.stringValue = String(Int(store.pollInterval))
-        alert.accessoryView = input
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        let value = Double(input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-        guard store.setPollInterval(value) else {
-            showError("轮询间隔必须 >= 1 秒")
-            return
-        }
-        startPolling()
-    }
-
     @objc private func handleOpenDashboard() {
         guard let rawURL = store.currentSource.dashboardURL,
               let url = URL(string: rawURL) else {
@@ -397,96 +342,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
             return
         }
         NSWorkspace.shared.open(url)
-    }
-
-    @objc private func handleConfigureMCP() {
-        let alert = NSAlert()
-        alert.messageText = "MCP 服务设置"
-        alert.informativeText = "启动应用时自动在本机启动一个 HTTP MCP 快照服务，供 AI 连接读取最新数据。"
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "保存")
-        alert.addButton(withTitle: "取消")
-
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 340, height: 82))
-
-        let checkbox = NSButton(checkboxWithTitle: "启用 MCP 本地服务", target: nil, action: nil)
-        checkbox.frame = NSRect(x: 0, y: 56, width: 220, height: 20)
-        checkbox.state = store.mcpEnabled ? .on : .off
-        container.addSubview(checkbox)
-
-        let label = NSTextField(labelWithString: "端口")
-        label.frame = NSRect(x: 0, y: 28, width: 40, height: 22)
-        container.addSubview(label)
-
-        let input = NSTextField(frame: NSRect(x: 44, y: 24, width: 120, height: 24))
-        input.stringValue = String(store.mcpPort)
-        container.addSubview(input)
-
-        let hint = NSTextField(labelWithString: "示例地址: http://\(AppMeta.mcpHost):\(store.mcpPort)/mcp/snapshot")
-        hint.textColor = .secondaryLabelColor
-        hint.frame = NSRect(x: 0, y: 0, width: 340, height: 22)
-        container.addSubview(hint)
-
-        alert.accessoryView = container
-
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        let enabled = checkbox.state == .on
-        let parsedPort = UInt16(input.stringValue.trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
-        guard parsedPort > 0 else {
-            showError("MCP 端口必须是 1-65535 之间的数字")
-            return
-        }
-
-        store.setMCPConfiguration(enabled: enabled, port: parsedPort)
-        restartMCPIfNeeded()
-        renderSummaryView()
-    }
-
-    @objc private func handleConfigureStatusColor() {
-        let alert = NSAlert()
-        alert.messageText = "状态栏文本颜色"
-        alert.informativeText = "可自动适配状态栏背景，也可手动设置文本/圆环颜色。"
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "保存")
-        alert.addButton(withTitle: "取消")
-
-        let container = NSView(frame: NSRect(x: 0, y: 0, width: 340, height: 104))
-
-        let autoAdaptCheckbox = NSButton(checkboxWithTitle: "根据状态栏背景自动适配", target: nil, action: nil)
-        autoAdaptCheckbox.frame = NSRect(x: 0, y: 80, width: 280, height: 20)
-        autoAdaptCheckbox.state = store.statusBarForegroundMode == .autoAdapt ? .on : .off
-        container.addSubview(autoAdaptCheckbox)
-
-        let colorLabel = NSTextField(labelWithString: "手动颜色")
-        colorLabel.frame = NSRect(x: 0, y: 50, width: 68, height: 22)
-        container.addSubview(colorLabel)
-
-        let colorWell = NSColorWell(frame: NSRect(x: 72, y: 46, width: 44, height: 28))
-        colorWell.color = store.statusBarManualColor
-        container.addSubview(colorWell)
-
-        let colorHexLabel = NSTextField(labelWithString: store.statusBarManualColorHex)
-        colorHexLabel.textColor = .secondaryLabelColor
-        colorHexLabel.frame = NSRect(x: 124, y: 50, width: 90, height: 22)
-        container.addSubview(colorHexLabel)
-
-        let hint = NSTextField(
-            labelWithString: "自动模式：深色背景用白色，浅色背景用黑色；无法判断时默认白色。"
-        )
-        hint.textColor = .secondaryLabelColor
-        hint.frame = NSRect(x: 0, y: 4, width: 340, height: 38)
-        hint.maximumNumberOfLines = 2
-        hint.lineBreakMode = .byWordWrapping
-        container.addSubview(hint)
-
-        alert.accessoryView = container
-        let response = alert.runModal()
-        guard response == .alertFirstButtonReturn else { return }
-
-        let mode: StatusBarForegroundMode = autoAdaptCheckbox.state == .on ? .autoAdapt : .manual
-        store.setStatusBarColor(mode: mode, color: colorWell.color)
     }
 
     @objc private func handleOpenPricing() {
@@ -520,16 +375,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     private func setLaunchAtLogin(_ enabled: Bool) {
         let previous = store.launchAtLoginEnabled
+        if let reason = launchAtLoginUnsupportedReason {
+            store.setLaunchAtLoginEnabled(false)
+            showError("开机自启设置失败：\(reason)")
+            return
+        }
         do {
             try syncLaunchAtLoginWithSystem(enabled: enabled)
             store.setLaunchAtLoginEnabled(enabled)
         } catch {
             store.setLaunchAtLoginEnabled(previous)
-            showError("开机自启设置失败：\(error.localizedDescription)")
+            showError("开机自启设置失败：\(readableLaunchAtLoginError(error))")
         }
     }
 
     private func syncLaunchAtLoginOnStartup() {
+        guard supportsLaunchAtLogin else {
+            store.setLaunchAtLoginEnabled(false)
+            return
+        }
         do {
             try syncLaunchAtLoginWithSystem(enabled: store.launchAtLoginEnabled)
         } catch {
@@ -549,13 +413,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
                 }
             } else {
                 switch service.status {
-                case .enabled, .requiresApproval:
+                case .enabled:
                     try service.unregister()
                 default:
                     break
                 }
             }
         }
+    }
+
+    private func readableLaunchAtLoginError(_ error: Error) -> String {
+        if let reason = launchAtLoginUnsupportedReason {
+            return reason
+        }
+        let text = error.localizedDescription
+        if text.localizedCaseInsensitiveContains("Invalid argument") {
+            return "系统拒绝了该请求。请将应用以 .app 形式运行后重试。"
+        }
+        return text
+    }
+
+    private static func colorFromHexString(_ rawValue: String) -> NSColor? {
+        var value = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("#") {
+            value.removeFirst()
+        }
+        guard value.count == 6, let hex = UInt32(value, radix: 16) else {
+            return nil
+        }
+        let red = CGFloat((hex >> 16) & 0xFF) / 255
+        let green = CGFloat((hex >> 8) & 0xFF) / 255
+        let blue = CGFloat(hex & 0xFF) / 255
+        return NSColor(calibratedRed: red, green: green, blue: blue, alpha: 1)
     }
 
     @objc private func handleQuit() {
@@ -601,6 +490,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         summaryView.apply(
             store.makeSummaryModel(
                 supportsLaunchAtLogin: supportsLaunchAtLogin,
+                launchAtLoginUnavailableReason: launchAtLoginUnsupportedReason,
                 mcpStatusText: currentMCPStatusText()
             )
         )
@@ -622,42 +512,84 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         let secondaryColor = primaryColor.withAlphaComponent(0.68)
         let snapshot = store.statusBarSnapshot()
 
-        guard snapshot.remaining != "--" else {
+        let hasDisplayData = snapshot.dailyUsedAmount != "--"
+            || snapshot.dailyRemainingAmount != "--"
+            || snapshot.weeklyUsedAmount != "--"
+            || snapshot.weeklyRemainingAmount != "--"
+            || snapshot.dailyUsedPercent != nil
+            || snapshot.weeklyUsedPercent != nil
+
+        guard hasDisplayData else {
             applySingleLineTitle(snapshot.fallbackText, color: primaryColor)
             return
         }
 
-        let clampedUsed = snapshot.usedPercent.map { max(0, min(100, $0)) }
-        let remainingPercent = clampedUsed.map { max(0, 100 - $0) }
+        let dailyUsedPercent = snapshot.dailyUsedPercent.map { max(0, min(100, $0)) }
+        let dailyRemainingPercent = dailyUsedPercent.map { max(0, 100 - $0) }
+        let weeklyUsedPercent = snapshot.weeklyUsedPercent.map { max(0, min(100, $0)) }
+        let weeklyRemainingPercent = weeklyUsedPercent.map { max(0, 100 - $0) }
 
         switch store.displayStyle {
-        case .remaining:
-            applySingleLineTitle("余: \(snapshot.remaining)", color: primaryColor)
-        case .usedPercent:
-            if let clampedUsed {
-                applySingleLineTitle(String(format: "用: %.2f%%", clampedUsed), color: primaryColor)
-            } else {
-                applySingleLineTitle("用: \(snapshot.usage)", color: primaryColor)
-            }
-        case .remainingPercent:
-            if let remainingPercent {
-                applySingleLineTitle(String(format: "剩: %.2f%%", remainingPercent), color: primaryColor)
-            } else {
-                applySingleLineTitle("剩: --", color: primaryColor)
-            }
-        case .stackedUsedPercent:
-            let top = clampedUsed.map { String(format: "%.2f%%", $0) } ?? "--"
-            applyTwoLineImage(top: top, bottom: "已使用", primaryColor: primaryColor, secondaryColor: secondaryColor)
-        case .stackedRemainingPercent:
-            let top = remainingPercent.map { String(format: "%.2f%%", $0) } ?? "--"
-            applyTwoLineImage(top: top, bottom: "剩余", primaryColor: primaryColor, secondaryColor: secondaryColor)
-        case .circleProgress:
+        case .dailyUsedAmount:
+            applySingleLineTitle("日用：\(snapshot.dailyUsedAmount)", color: primaryColor)
+        case .dailyRemainingAmount:
+            applySingleLineTitle("日余：\(snapshot.dailyRemainingAmount)", color: primaryColor)
+        case .dailyUsedCircle:
             applyCircleProgressWithRemaining(
-                progress: clampedUsed.map { $0 / 100 },
-                remainingText: "余: \(snapshot.remaining)",
+                progress: dailyUsedPercent.map { $0 / 100 },
+                remainingText: "日用：\(snapshot.dailyUsedAmount)",
                 primaryColor: primaryColor,
                 secondaryColor: secondaryColor
             )
+        case .dailyRemainingCircle:
+            applyCircleProgressWithRemaining(
+                progress: dailyRemainingPercent.map { $0 / 100 },
+                remainingText: "日余：\(snapshot.dailyRemainingAmount)",
+                primaryColor: primaryColor,
+                secondaryColor: secondaryColor
+            )
+        case .dailyUsedPercent:
+            if let dailyUsedPercent {
+                applySingleLineTitle(String(format: "日用：%.2f%%", dailyUsedPercent), color: primaryColor)
+            } else {
+                applySingleLineTitle("日用：--", color: primaryColor)
+            }
+        case .dailyRemainingPercent:
+            if let dailyRemainingPercent {
+                applySingleLineTitle(String(format: "日余：%.2f%%", dailyRemainingPercent), color: primaryColor)
+            } else {
+                applySingleLineTitle("日余：--", color: primaryColor)
+            }
+        case .weeklyUsedAmount:
+            applySingleLineTitle("周用：\(snapshot.weeklyUsedAmount)", color: primaryColor)
+        case .weeklyRemainingAmount:
+            applySingleLineTitle("周余：\(snapshot.weeklyRemainingAmount)", color: primaryColor)
+        case .weeklyUsedCircle:
+            applyCircleProgressWithRemaining(
+                progress: weeklyUsedPercent.map { $0 / 100 },
+                remainingText: "周用：\(snapshot.weeklyUsedAmount)",
+                primaryColor: primaryColor,
+                secondaryColor: secondaryColor
+            )
+        case .weeklyRemainingCircle:
+            applyCircleProgressWithRemaining(
+                progress: weeklyRemainingPercent.map { $0 / 100 },
+                remainingText: "周余：\(snapshot.weeklyRemainingAmount)",
+                primaryColor: primaryColor,
+                secondaryColor: secondaryColor
+            )
+        case .weeklyUsedPercent:
+            if let weeklyUsedPercent {
+                applySingleLineTitle(String(format: "周用：%.2f%%", weeklyUsedPercent), color: primaryColor)
+            } else {
+                applySingleLineTitle("周用：--", color: primaryColor)
+            }
+        case .weeklyRemainingPercent:
+            if let weeklyRemainingPercent {
+                applySingleLineTitle(String(format: "周余：%.2f%%", weeklyRemainingPercent), color: primaryColor)
+            } else {
+                applySingleLineTitle("周余：--", color: primaryColor)
+            }
         }
     }
 

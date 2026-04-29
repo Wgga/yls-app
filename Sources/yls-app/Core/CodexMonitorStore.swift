@@ -13,7 +13,7 @@ final class CodexMonitorStore {
     private(set) var currentSource: PackageSource = .codex
     private(set) var statisticsDisplayMode: StatisticsDisplayMode = .single
     private(set) var pollInterval: TimeInterval = 5
-    private(set) var displayStyle: StatusDisplayStyle = .remaining
+    private(set) var displayStyle: StatusDisplayStyle = .dailyRemainingAmount
     private(set) var statusBarForegroundMode: StatusBarForegroundMode = .autoAdapt
     private(set) var statusBarManualColorHex = AppMeta.defaultStatusBarColorHex
     private(set) var statusBarManualColor = NSColor.white
@@ -87,7 +87,7 @@ final class CodexMonitorStore {
         }
 
         let rawStyle = defaults.integer(forKey: DefaultsKey.displayStyle)
-        displayStyle = StatusDisplayStyle(rawValue: rawStyle) ?? .remaining
+        displayStyle = StatusDisplayStyle(rawValue: rawStyle) ?? .dailyRemainingAmount
 
         if defaults.object(forKey: DefaultsKey.statusBarColorAutoAdapt) != nil {
             statusBarForegroundMode = defaults.bool(forKey: DefaultsKey.statusBarColorAutoAdapt) ? .autoAdapt : .manual
@@ -252,6 +252,7 @@ final class CodexMonitorStore {
 
     func makeSummaryModel(
         supportsLaunchAtLogin: Bool,
+        launchAtLoginUnavailableReason: String?,
         mcpStatusText: String
     ) -> StatusSummaryViewModel {
         let activeState = state(for: currentSource)
@@ -315,6 +316,7 @@ final class CodexMonitorStore {
 
         return StatusSummaryViewModel(
             title: AppMeta.displayName,
+            currentSource: currentSource,
             currentSourceTitle: currentSource.chipTitle,
             statisticsDisplayMode: statisticsDisplayMode,
             statisticsModeText: statisticsDisplayMode.fullTitle,
@@ -339,13 +341,21 @@ final class CodexMonitorStore {
             hasAGIKey: !agiAPIKey.isEmpty,
             codexAPIKeyStatusText: apiKeyStatusText(for: .codex),
             agiAPIKeyStatusText: apiKeyStatusText(for: .agi),
+            codexAPIKeyMaskedText: Self.maskedAPIKey(apiKey),
+            agiAPIKeyMaskedText: Self.maskedAPIKey(agiAPIKey),
+            pollIntervalSeconds: pollInterval,
             pollIntervalText: "\(Int(pollInterval)) 秒",
             launchAtLoginEnabled: launchAtLoginEnabled,
             launchAtLoginSupported: supportsLaunchAtLogin,
+            launchAtLoginUnavailableReason: launchAtLoginUnavailableReason,
             displayStyle: displayStyle,
+            statusBarForegroundMode: statusBarForegroundMode,
+            statusBarManualColorHex: statusBarManualColorHex,
             statusBarColorText: currentStatusBarColorText(),
             panelMode: panelMode,
             mcpStatusText: mcpStatusText,
+            mcpEnabled: mcpEnabled,
+            mcpPort: mcpPort,
             canOpenDashboard: currentSource.dashboardURL != nil,
             canOpenPricing: currentSource.pricingURL != nil,
             dashboardActionTitle: currentSource.openDashboardTitle,
@@ -427,7 +437,7 @@ final class CodexMonitorStore {
 
         do {
             let response = try await networkService.fetchCodexUsageInfo(using: request)
-            updateStatusBar(text: "余: \(response.state.remainingText)")
+            updateStatusBar(text: "日余：\(response.state.dailyRemainingText)")
             updateMenu(
                 usage: response.state.usageText,
                 remaining: response.state.remainingText,
@@ -682,6 +692,7 @@ final class CodexMonitorStore {
         weeklyUsagePayload: UsagePayload? = nil
     ) {
         var state = state(for: .codex)
+        let resolvedDailyRemaining = dailyRemaining ?? dailyUsagePayload?.remainingQuota?.display ?? "--"
         state.usage = usage
         state.remaining = remaining
         state.renewal = renewal
@@ -692,14 +703,15 @@ final class CodexMonitorStore {
         state.email = email
         state.packageItems = packageItems
         state.usedPercent = usedPercent
+        state.dailyRemaining = resolvedDailyRemaining
         state.dailyUsagePayload = dailyUsagePayload
         state.weeklyUsagePayload = weeklyUsagePayload
-        state.fallbackText = remaining == "--" ? statusFallbackText : "余: \(remaining)"
+        state.fallbackText = resolvedDailyRemaining == "--" ? statusFallbackText : "日余：\(resolvedDailyRemaining)"
         sourceStates[.codex] = state
 
         latestUsage = usage
         latestRemaining = remaining
-        latestDailyRemaining = dailyRemaining ?? "--"
+        latestDailyRemaining = resolvedDailyRemaining
         latestWeeklyRemaining = weeklyRemaining ?? "--"
         latestRenewal = renewal
         latestMessage = message
@@ -732,6 +744,7 @@ final class CodexMonitorStore {
         state.email = nil
         state.packageItems = packageItems
         state.usedPercent = usedPercent
+        state.dailyRemaining = nil
         state.dailyUsagePayload = nil
         state.weeklyUsagePayload = nil
         state.fallbackText = remaining == "--" ? "AGI: \(message.isEmpty ? "未配置Key" : "异常")" : "余: \(remaining)"
@@ -762,13 +775,53 @@ final class CodexMonitorStore {
         notifyStateChanged()
     }
 
-    func statusBarSnapshot() -> (remaining: String, usage: String, usedPercent: Double?, fallbackText: String) {
+    func statusBarSnapshot() -> (
+        dailyUsedAmount: String,
+        dailyRemainingAmount: String,
+        weeklyUsedAmount: String,
+        weeklyRemainingAmount: String,
+        dailyUsedPercent: Double?,
+        weeklyUsedPercent: Double?,
+        fallbackText: String
+    ) {
         let source = primaryStatusSource()
         let sourceState = state(for: source)
+
+        let dailyRemainingAmount = sourceState.dailyRemaining ?? sourceState.dailyUsagePayload?.remainingQuota?.display ?? "--"
+        let weeklyRemainingAmount = sourceState.weeklyUsagePayload?.remainingQuota?.display ?? sourceState.remaining
+
+        let dailyTotalQuota = sourceState.dailyUsagePayload?.totalQuota?.doubleValue
+        let dailyRemainingQuota = sourceState.dailyUsagePayload?.remainingQuota?.doubleValue
+        let dailyUsedQuota: Double?
+        if let dailyTotalQuota, dailyTotalQuota > 0, let dailyRemainingQuota {
+            dailyUsedQuota = max(0, dailyTotalQuota - dailyRemainingQuota)
+        } else {
+            dailyUsedQuota = sourceState.dailyUsagePayload?.totalCost?.doubleValue
+        }
+        let dailyUsedPercent = Self.resolveUsedPercentFromPayload(
+            usage: sourceState.dailyUsagePayload,
+            used: dailyUsedQuota,
+            total: dailyTotalQuota
+        )
+
+        let dailyUsedAmount: String
+        if let totalCostDisplay = sourceState.dailyUsagePayload?.totalCost?.display {
+            dailyUsedAmount = totalCostDisplay
+        } else if let dailyUsedQuota {
+            dailyUsedAmount = Self.formatAmount(dailyUsedQuota)
+        } else {
+            dailyUsedAmount = "--"
+        }
+
+        let weeklyUsedAmount = sourceState.weeklyUsagePayload?.totalCost?.display ?? sourceState.usage
+
         return (
-            remaining: sourceState.remaining,
-            usage: sourceState.usage,
-            usedPercent: sourceState.usedPercent,
+            dailyUsedAmount: dailyUsedAmount,
+            dailyRemainingAmount: dailyRemainingAmount,
+            weeklyUsedAmount: weeklyUsedAmount,
+            weeklyRemainingAmount: weeklyRemainingAmount,
+            dailyUsedPercent: dailyUsedPercent,
+            weeklyUsedPercent: sourceState.usedPercent,
             fallbackText: sourceState.fallbackText
         )
     }
@@ -814,6 +867,11 @@ final class CodexMonitorStore {
 
     private func apiKeyStatusText(for source: PackageSource) -> String {
         apiKeyValue(for: source).isEmpty ? "未配置" : "已配置"
+    }
+
+    private static func maskedAPIKey(_ apiKey: String) -> String {
+        guard !apiKey.isEmpty else { return "" }
+        return String(repeating: "•", count: apiKey.count)
     }
 
     private func primaryStatusSource() -> PackageSource {
@@ -959,6 +1017,15 @@ final class CodexMonitorStore {
         let percent = (used / total) * 100
         guard percent.isFinite else { return nil }
         return min(max(percent, 0), 100)
+    }
+
+    nonisolated private static func formatAmount(_ value: Double) -> String {
+        guard value.isFinite else { return "--" }
+        var text = String(format: "%.2f", value)
+        while text.contains(".") && (text.hasSuffix("0") || text.hasSuffix(".")) {
+            text.removeLast()
+        }
+        return text
     }
 
     nonisolated private static func integerValue(_ number: FlexibleNumber?) -> Int? {

@@ -85,14 +85,6 @@ enum PackageSource: String, CaseIterable {
         }
     }
 
-    var apiKeyDialogTitle: String {
-        "设置 \(settingsTitle) API Key"
-    }
-
-    var apiKeyDialogHint: String {
-        "请输入 \(settingsTitle) Bearer Token（只填 token 本体）"
-    }
-
     var dashboardURL: String? {
         switch self {
         case .codex:
@@ -122,78 +114,283 @@ enum PackageSource: String, CaseIterable {
 }
 
 enum StatusDisplayStyle: Int, CaseIterable {
-    case remaining = 0
-    case usedPercent
-    case remainingPercent
-    case stackedUsedPercent
-    case stackedRemainingPercent
-    case circleProgress
+    case dailyRemainingAmount = 0
+    case dailyRemainingCircle = 1
+    case weeklyUsedPercent = 2
+    case weeklyRemainingPercent = 3
+    case weeklyUsedCircle = 4
+    case weeklyRemainingCircle = 5
+    case dailyUsedAmount = 6
+    case dailyUsedCircle = 7
+    case dailyUsedPercent = 8
+    case dailyRemainingPercent = 9
+    case weeklyUsedAmount = 10
+    case weeklyRemainingAmount = 11
+
+    static let selectorOrder: [StatusDisplayStyle] = [
+        .dailyUsedAmount,
+        .dailyRemainingAmount,
+        .dailyUsedCircle,
+        .dailyRemainingCircle,
+        .dailyUsedPercent,
+        .dailyRemainingPercent,
+        .weeklyUsedAmount,
+        .weeklyRemainingAmount,
+        .weeklyUsedCircle,
+        .weeklyRemainingCircle,
+        .weeklyUsedPercent,
+        .weeklyRemainingPercent
+    ]
+
+    enum TimeRange: String, CaseIterable {
+        case daily
+        case weekly
+
+        var title: String {
+            switch self {
+            case .daily:
+                return "每日"
+            case .weekly:
+                return "每周"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .daily:
+                return "sun.max"
+            case .weekly:
+                return "calendar"
+            }
+        }
+    }
+
+    enum MetricKind: String, CaseIterable {
+        case used
+        case remaining
+
+        var title: String {
+            switch self {
+            case .used:
+                return "用量"
+            case .remaining:
+                return "剩余"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .used:
+                return "arrow.up.forward"
+            case .remaining:
+                return "arrow.down.forward"
+            }
+        }
+    }
+
+    enum PresentationKind: String, CaseIterable {
+        case amount
+        case circle
+        case percent
+
+        var title: String {
+            switch self {
+            case .amount:
+                return "金额"
+            case .circle:
+                return "圆环"
+            case .percent:
+                return "百分比"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .amount:
+                return "banknote"
+            case .circle:
+                return "gauge"
+            case .percent:
+                return "percent"
+            }
+        }
+    }
+
+    var timeRange: TimeRange {
+        switch self {
+        case .dailyUsedAmount, .dailyRemainingAmount, .dailyUsedCircle, .dailyRemainingCircle, .dailyUsedPercent, .dailyRemainingPercent:
+            return .daily
+        case .weeklyUsedAmount, .weeklyRemainingAmount, .weeklyUsedCircle, .weeklyRemainingCircle, .weeklyUsedPercent, .weeklyRemainingPercent:
+            return .weekly
+        }
+    }
+
+    var metricKind: MetricKind {
+        switch self {
+        case .dailyUsedAmount, .dailyUsedCircle, .dailyUsedPercent, .weeklyUsedAmount, .weeklyUsedCircle, .weeklyUsedPercent:
+            return .used
+        case .dailyRemainingAmount, .dailyRemainingCircle, .dailyRemainingPercent, .weeklyRemainingAmount, .weeklyRemainingCircle, .weeklyRemainingPercent:
+            return .remaining
+        }
+    }
+
+    var presentationKind: PresentationKind {
+        switch self {
+        case .dailyUsedAmount, .dailyRemainingAmount, .weeklyUsedAmount, .weeklyRemainingAmount:
+            return .amount
+        case .dailyUsedCircle, .dailyRemainingCircle, .weeklyUsedCircle, .weeklyRemainingCircle:
+            return .circle
+        case .dailyUsedPercent, .dailyRemainingPercent, .weeklyUsedPercent, .weeklyRemainingPercent:
+            return .percent
+        }
+    }
+
+    static func resolve(
+        timeRange: TimeRange,
+        metricKind: MetricKind,
+        presentationKind: PresentationKind
+    ) -> StatusDisplayStyle {
+        switch (timeRange, metricKind, presentationKind) {
+        case (.daily, .used, .amount):
+            return .dailyUsedAmount
+        case (.daily, .remaining, .amount):
+            return .dailyRemainingAmount
+        case (.daily, .used, .circle):
+            return .dailyUsedCircle
+        case (.daily, .remaining, .circle):
+            return .dailyRemainingCircle
+        case (.daily, .used, .percent):
+            return .dailyUsedPercent
+        case (.daily, .remaining, .percent):
+            return .dailyRemainingPercent
+        case (.weekly, .used, .amount):
+            return .weeklyUsedAmount
+        case (.weekly, .remaining, .amount):
+            return .weeklyRemainingAmount
+        case (.weekly, .used, .circle):
+            return .weeklyUsedCircle
+        case (.weekly, .remaining, .circle):
+            return .weeklyRemainingCircle
+        case (.weekly, .used, .percent):
+            return .weeklyUsedPercent
+        case (.weekly, .remaining, .percent):
+            return .weeklyRemainingPercent
+        }
+    }
 
     var title: String {
         switch self {
-        case .remaining:
-            return "样式1: 余:xx.xx（默认）"
-        case .usedPercent:
-            return "样式2: 用:xx.xx%"
-        case .remainingPercent:
-            return "样式3: 剩:xx.xx%"
-        case .stackedUsedPercent:
-            return "样式4: 上下-上用量% 下已使用"
-        case .stackedRemainingPercent:
-            return "样式5: 上下-上剩余% 下剩余"
-        case .circleProgress:
-            return "样式6: 上圆圈 下余量"
+        case .dailyUsedAmount:
+            return "样式1: 日用：xx.xx"
+        case .dailyRemainingAmount:
+            return "样式2: 日余：xx.xx"
+        case .dailyUsedCircle:
+            return "样式3: 日用圆环"
+        case .dailyRemainingCircle:
+            return "样式4: 日余圆环"
+        case .dailyUsedPercent:
+            return "样式5: 日用：xx.xx%"
+        case .dailyRemainingPercent:
+            return "样式6: 日余：xx.xx%"
+        case .weeklyUsedAmount:
+            return "样式7: 周用：xx.xx"
+        case .weeklyRemainingAmount:
+            return "样式8: 周余：xx.xx"
+        case .weeklyUsedCircle:
+            return "样式9: 周用圆环"
+        case .weeklyRemainingCircle:
+            return "样式10: 周余圆环"
+        case .weeklyUsedPercent:
+            return "样式11: 周用：xx.xx%"
+        case .weeklyRemainingPercent:
+            return "样式12: 周余：xx.xx%"
         }
     }
 
     var chipTitle: String {
         switch self {
-        case .remaining:
-            return "余量"
-        case .usedPercent:
-            return "用量%"
-        case .remainingPercent:
-            return "剩余%"
-        case .stackedUsedPercent:
-            return "上下用"
-        case .stackedRemainingPercent:
-            return "上下剩"
-        case .circleProgress:
-            return "圆环"
+        case .dailyUsedAmount:
+            return "每日用量(金额)"
+        case .dailyRemainingAmount:
+            return "每日剩余(金额)"
+        case .dailyUsedCircle:
+            return "每日用量(圆环)"
+        case .dailyRemainingCircle:
+            return "每日剩余(圆环)"
+        case .dailyUsedPercent:
+            return "每日用量(%)"
+        case .dailyRemainingPercent:
+            return "每日剩余(%)"
+        case .weeklyUsedAmount:
+            return "每周用量(金额)"
+        case .weeklyRemainingAmount:
+            return "每周剩余(金额)"
+        case .weeklyUsedCircle:
+            return "每周用量(圆环)"
+        case .weeklyRemainingCircle:
+            return "每周剩余(圆环)"
+        case .weeklyUsedPercent:
+            return "每周用量(%)"
+        case .weeklyRemainingPercent:
+            return "每周剩余(%)"
         }
     }
 
     var selectorSymbol: String {
         switch self {
-        case .remaining:
+        case .dailyUsedAmount:
+            return "banknote"
+        case .dailyRemainingAmount:
             return "text.alignleft"
-        case .usedPercent:
-            return "chart.bar.fill"
-        case .remainingPercent:
-            return "chart.bar.doc.horizontal"
-        case .stackedUsedPercent:
-            return "rectangle.split.2x1"
-        case .stackedRemainingPercent:
-            return "rectangle.split.2x1.fill"
-        case .circleProgress:
+        case .dailyUsedCircle:
             return "gauge.with.dots.needle.bottom.50percent"
+        case .dailyRemainingCircle:
+            return "gauge"
+        case .dailyUsedPercent:
+            return "chart.bar.fill"
+        case .dailyRemainingPercent:
+            return "chart.bar.doc.horizontal"
+        case .weeklyUsedAmount:
+            return "banknote.fill"
+        case .weeklyRemainingAmount:
+            return "text.alignright"
+        case .weeklyUsedCircle:
+            return "smallcircle.filled.circle"
+        case .weeklyRemainingCircle:
+            return "smallcircle.circle"
+        case .weeklyUsedPercent:
+            return "chart.bar.xaxis"
+        case .weeklyRemainingPercent:
+            return "chart.xyaxis.line"
         }
     }
 
     var selectorPreview: String {
         switch self {
-        case .remaining:
-            return "余: 90.47"
-        case .usedPercent:
-            return "用: 14.06%"
-        case .remainingPercent:
-            return "剩: 85.94%"
-        case .stackedUsedPercent:
-            return "14.06% / 已使用"
-        case .stackedRemainingPercent:
-            return "85.94% / 剩余"
-        case .circleProgress:
-            return "圆环 + 余量"
+        case .dailyUsedAmount:
+            return "日用：9.53"
+        case .dailyRemainingAmount:
+            return "日余：90.47"
+        case .dailyUsedCircle:
+            return "圆环 + 日用"
+        case .dailyRemainingCircle:
+            return "圆环 + 日余"
+        case .dailyUsedPercent:
+            return "日用：9.53%"
+        case .dailyRemainingPercent:
+            return "日余：90.47%"
+        case .weeklyUsedAmount:
+            return "周用：14.06"
+        case .weeklyRemainingAmount:
+            return "周余：85.94"
+        case .weeklyUsedCircle:
+            return "圆环 + 周用"
+        case .weeklyRemainingCircle:
+            return "圆环 + 周余"
+        case .weeklyUsedPercent:
+            return "周用：14.06%"
+        case .weeklyRemainingPercent:
+            return "周余：85.94%"
         }
     }
 }
@@ -541,6 +738,7 @@ enum SummaryStatusTone: Equatable {
 
 struct StatusSummaryViewModel {
     let title: String
+    let currentSource: PackageSource
     let currentSourceTitle: String
     let statisticsDisplayMode: StatisticsDisplayMode
     let statisticsModeText: String
@@ -565,13 +763,21 @@ struct StatusSummaryViewModel {
     let hasAGIKey: Bool
     let codexAPIKeyStatusText: String
     let agiAPIKeyStatusText: String
+    let codexAPIKeyMaskedText: String
+    let agiAPIKeyMaskedText: String
+    let pollIntervalSeconds: Double
     let pollIntervalText: String
     let launchAtLoginEnabled: Bool
     let launchAtLoginSupported: Bool
+    let launchAtLoginUnavailableReason: String?
     let displayStyle: StatusDisplayStyle
+    let statusBarForegroundMode: StatusBarForegroundMode
+    let statusBarManualColorHex: String
     let statusBarColorText: String
     let panelMode: MenuPanelMode
     let mcpStatusText: String
+    let mcpEnabled: Bool
+    let mcpPort: UInt16
     let canOpenDashboard: Bool
     let canOpenPricing: Bool
     let dashboardActionTitle: String
@@ -754,6 +960,7 @@ struct SourceMonitorState {
     var packageItems: [SummaryPackageItem]
     var usedPercent: Double?
     var fallbackText: String
+    var dailyRemaining: String?
     var dailyUsagePayload: UsagePayload?
     var weeklyUsagePayload: UsagePayload?
 
@@ -771,6 +978,7 @@ struct SourceMonitorState {
             packageItems: [],
             usedPercent: nil,
             fallbackText: hasAPIKey ? "\(source.chipTitle): 加载中..." : "\(source.chipTitle): 未配置Key",
+            dailyRemaining: nil,
             dailyUsagePayload: nil,
             weeklyUsagePayload: nil
         )
@@ -811,6 +1019,7 @@ extension SummaryStatusTone {
 extension StatusSummaryViewModel {
     static let placeholder = StatusSummaryViewModel(
         title: AppMeta.displayName,
+        currentSource: .codex,
         currentSourceTitle: PackageSource.codex.chipTitle,
         statisticsDisplayMode: .single,
         statisticsModeText: StatisticsDisplayMode.single.fullTitle,
@@ -835,13 +1044,21 @@ extension StatusSummaryViewModel {
         hasAGIKey: false,
         codexAPIKeyStatusText: "未配置",
         agiAPIKeyStatusText: "未配置",
+        codexAPIKeyMaskedText: "",
+        agiAPIKeyMaskedText: "",
+        pollIntervalSeconds: 5,
         pollIntervalText: "--",
         launchAtLoginEnabled: true,
         launchAtLoginSupported: true,
-        displayStyle: .remaining,
+        launchAtLoginUnavailableReason: nil,
+        displayStyle: .dailyRemainingAmount,
+        statusBarForegroundMode: .autoAdapt,
+        statusBarManualColorHex: AppMeta.defaultStatusBarColorHex,
         statusBarColorText: "自动适配（手动 #FFFFFF）",
         panelMode: .statistics,
         mcpStatusText: "MCP 未启动",
+        mcpEnabled: false,
+        mcpPort: AppMeta.defaultMCPPort,
         canOpenDashboard: true,
         canOpenPricing: true,
         dashboardActionTitle: PackageSource.codex.openDashboardTitle,
