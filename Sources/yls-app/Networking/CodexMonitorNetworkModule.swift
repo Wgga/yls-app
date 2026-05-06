@@ -148,13 +148,6 @@ struct AGIPackageInfoRequestViewModel {
 }
 
 struct CodexUsageInfoResponseViewModel {
-    struct Metadata {
-        let httpStatusCode: Int
-        let businessCode: Int?
-        let message: String?
-        let details: String?
-    }
-
     struct StateViewModel {
         let email: String?
         let usageText: String
@@ -171,35 +164,18 @@ struct CodexUsageInfoResponseViewModel {
         let weeklyUsagePayload: UsagePayload?
     }
 
-    let request: CodexUsageInfoRequestViewModel
-    let metadata: Metadata
     let state: StateViewModel
 }
 
 struct CodexUsageLogsResponseViewModel {
-    struct Metadata {
-        let httpStatusCode: Int
-        let businessCode: Int?
-        let message: String?
-        let details: String?
-    }
-
     struct StateViewModel {
         let panel: CodexUsageRecordsPanelViewModel
     }
 
-    let request: CodexUsageLogsRequestViewModel
-    let metadata: Metadata
     let state: StateViewModel
 }
 
 struct AGIPackageInfoResponseViewModel {
-    struct Metadata {
-        let httpStatusCode: Int
-        let businessCode: Int?
-        let message: String?
-    }
-
     struct StateViewModel {
         let usageText: String
         let remainingText: String
@@ -208,8 +184,6 @@ struct AGIPackageInfoResponseViewModel {
         let packageItems: [SummaryPackageItem]
     }
 
-    let request: AGIPackageInfoRequestViewModel
-    let metadata: Metadata
     let state: StateViewModel
 }
 
@@ -322,13 +296,6 @@ final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
             usage = "--"
         }
 
-        let metadata = CodexUsageInfoResponseViewModel.Metadata(
-            httpStatusCode: httpResponse.statusCode,
-            businessCode: decoded.code,
-            message: decoded.msg,
-            details: decoded.details
-        )
-
         let viewModelState = CodexUsageInfoResponseViewModel.StateViewModel(
             email: state.user?.email,
             usageText: usage,
@@ -346,8 +313,6 @@ final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
         )
 
         return CodexUsageInfoResponseViewModel(
-            request: request,
-            metadata: metadata,
             state: viewModelState
         )
     }
@@ -418,16 +383,7 @@ final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
             errorText: nil
         )
 
-        let metadata = CodexUsageLogsResponseViewModel.Metadata(
-            httpStatusCode: httpResponse.statusCode,
-            businessCode: decoded.code,
-            message: decoded.msg,
-            details: decoded.details
-        )
-
         return CodexUsageLogsResponseViewModel(
-            request: request,
-            metadata: metadata,
             state: CodexUsageLogsResponseViewModel.StateViewModel(panel: panel)
         )
     }
@@ -435,25 +391,30 @@ final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
     func fetchAGIPackageInfo(
         using request: AGIPackageInfoRequestViewModel
     ) async throws -> AGIPackageInfoResponseViewModel {
-        let urlRequest = request.makeURLRequest()
         let data: Data
-        let httpResponse: HTTPURLResponse
 
-        do {
-            let (responseData, response) = try await session.data(for: urlRequest)
-            guard let typedResponse = response as? HTTPURLResponse else {
-                throw CodexMonitorNetworkError.invalidHTTPResponse(source: .agi)
+        if Self.useMockAGIPackageInfo {
+            data = Data(Self.mockAGIPackageInfoJSON.utf8)
+        } else {
+            let urlRequest = request.makeURLRequest()
+            let httpResponse: HTTPURLResponse
+
+            do {
+                let (responseData, response) = try await session.data(for: urlRequest)
+                guard let typedResponse = response as? HTTPURLResponse else {
+                    throw CodexMonitorNetworkError.invalidHTTPResponse(source: .agi)
+                }
+                data = responseData
+                httpResponse = typedResponse
+            } catch let error as CodexMonitorNetworkError {
+                throw error
+            } catch {
+                throw CodexMonitorNetworkError.transport(source: .agi, message: error.localizedDescription)
             }
-            data = responseData
-            httpResponse = typedResponse
-        } catch let error as CodexMonitorNetworkError {
-            throw error
-        } catch {
-            throw CodexMonitorNetworkError.transport(source: .agi, message: error.localizedDescription)
-        }
 
-        guard (200 ... 299).contains(httpResponse.statusCode) else {
-            throw CodexMonitorNetworkError.httpStatus(source: .agi, statusCode: httpResponse.statusCode)
+            guard (200 ... 299).contains(httpResponse.statusCode) else {
+                throw CodexMonitorNetworkError.httpStatus(source: .agi, statusCode: httpResponse.statusCode)
+            }
         }
 
         let decoded: AGIPackageEnvelope
@@ -500,12 +461,6 @@ final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
             usage = "--"
         }
 
-        let metadata = AGIPackageInfoResponseViewModel.Metadata(
-            httpStatusCode: httpResponse.statusCode,
-            businessCode: decoded.code,
-            message: decoded.message
-        )
-
         let viewModelState = AGIPackageInfoResponseViewModel.StateViewModel(
             usageText: usage,
             remainingText: Self.formatByteCount(remainingBytes),
@@ -515,11 +470,39 @@ final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
         )
 
         return AGIPackageInfoResponseViewModel(
-            request: request,
-            metadata: metadata,
             state: viewModelState
         )
     }
+
+    private static let useMockAGIPackageInfo = true
+
+    private static let mockAGIPackageInfoJSON = """
+    {
+      "code": 200,
+      "msg": "acquire success",
+      "total": 2,
+      "row": [
+        {
+          "_id": "652d7066b06100006d002572",
+          "byte": 1999136,
+          "byte_total": 2000000,
+          "createTime": "2026-4-30T10:49:24.052Z",
+          "expireTime": "2026-5-30T10:49:24.052Z",
+          "day": 62,
+          "time": "2023-10-16T17:28:01.630Z"
+        },
+        {
+          "_id": "64fb3ac8e2288b239829c16f",
+          "byte": 1999577,
+          "byte_total": 2000000,
+          "createTime": "2026-4-30T10:49:24.052Z",
+          "expireTime": "2026-5-30T10:49:24.052Z",
+          "day": 62,
+          "time": "2023-10-03T16:45:00.922Z"
+        }
+      ]
+    }
+    """
 
     private func buildUsageLogRow(
         item: CodexUsageLogPayload,
@@ -738,7 +721,7 @@ final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
 
                 return SummaryPackageItem(
                     title: normalizeAGIPackageTitle(orderClass: item.orderClass, level: item.level),
-                    subtitle: "开通 \(createText)  到期 \(expireText)  · \(reasonText)",
+                    subtitle: "生效 \(createText)  到期 \(expireText)  · \(reasonText)",
                     badgeText: daysRemaining == 0 ? "今天到期" : "剩\(daysRemaining)天",
                     badgeTone: badgeTone
                 )

@@ -80,54 +80,6 @@ private struct CustomSkinSliderHitLayer: NSViewRepresentable {
 
 extension View {
     @ViewBuilder
-    func compactSurface(cornerRadius: CGFloat, tint: Color = .clear) -> some View {
-        let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-        #if compiler(>=6.2)
-        if #available(macOS 26.0, *) {
-            self
-                .background {
-                    ZStack {
-                        Rectangle()
-                            .fill(.clear)
-                            .glassEffect(.regular, in: shape)
-                        shape
-                            .fill(tint)
-                    }
-                }
-                .overlay {
-                    shape.stroke(.quaternary, lineWidth: 0.8)
-                }
-        } else {
-            self
-                .background {
-                    ZStack {
-                        shape
-                            .fill(.ultraThinMaterial)
-                        shape
-                            .fill(tint)
-                    }
-                }
-                .overlay {
-                    shape.stroke(.quaternary, lineWidth: 0.8)
-                }
-        }
-        #else
-        self
-            .background {
-                ZStack {
-                    shape
-                        .fill(.ultraThinMaterial)
-                    shape
-                        .fill(tint)
-                }
-            }
-            .overlay {
-                shape.stroke(.quaternary, lineWidth: 0.8)
-            }
-        #endif
-    }
-
-    @ViewBuilder
     func contentMaterialSurface(cornerRadius: CGFloat, tint: Color = .clear) -> some View {
         let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         self
@@ -178,145 +130,6 @@ extension View {
             .overlay {
                 shape.stroke(border, lineWidth: 0.8)
             }
-    }
-}
-
-struct MenuActionButton: View {
-    let title: String
-    let subtitle: String?
-    let systemImage: String
-    let prominent: Bool
-    let action: (() -> Void)?
-    let useInfoCardBackground: Bool
-
-    @State private var isHovered = false
-    @Environment(\.colorScheme) private var colorScheme
-
-    init(
-        title: String,
-        subtitle: String?,
-        systemImage: String,
-        prominent: Bool,
-        action: (() -> Void)?,
-        useInfoCardBackground: Bool = false
-    ) {
-        self.title = title
-        self.subtitle = subtitle
-        self.systemImage = systemImage
-        self.prominent = prominent
-        self.action = action
-        self.useInfoCardBackground = useInfoCardBackground
-    }
-
-    private var compactTint: Color {
-        prominent
-            ? (isHovered ? .secondary.opacity(0.14) : .secondary.opacity(0.08))
-            : (isHovered ? .primary.opacity(0.10) : .primary.opacity(0.04))
-    }
-
-    @ViewBuilder
-    private func applySurface<Content: View>(to content: Content) -> some View {
-        if useInfoCardBackground {
-            content
-                .summaryDashboardSurface(cornerRadius: 15, colorScheme: colorScheme, elevated: true)
-        } else {
-            content
-                .compactSurface(
-                    cornerRadius: 15,
-                    tint: compactTint
-                )
-        }
-    }
-
-    var body: some View {
-        Button(action: { action?() }) {
-            applySurface(
-                to: HStack(spacing: 10) {
-                    Image(systemName: systemImage)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(prominent ? .primary : .secondary)
-                        .frame(width: 22, height: 22)
-                        .background(
-                            Circle()
-                                .fill(.thinMaterial)
-                        )
-
-                    HStack(alignment: .firstTextBaseline, spacing: 6) {
-                        Text(title)
-                            .font(.system(size: 13, weight: .bold))
-                            .foregroundStyle(.primary)
-                            .lineLimit(1)
-
-                        if let subtitle {
-                            Text(subtitle)
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                    .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 10)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            )
-            .overlay {
-                if prominent, !useInfoCardBackground {
-                    RoundedRectangle(cornerRadius: 15, style: .continuous)
-                        .stroke(.tertiary, lineWidth: 1)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
-    }
-}
-
-struct StyleChipButton: View {
-    let style: StatusDisplayStyle
-    let isSelected: Bool
-    let action: () -> Void
-
-    @State private var isHovered = false
-
-    var body: some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 6) {
-                    Image(systemName: style.selectorSymbol)
-                        .font(.system(size: 11, weight: .semibold))
-                    Text(style.chipTitle)
-                        .font(.system(size: 11, weight: .semibold))
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.78)
-                    Spacer(minLength: 4)
-                }
-                .foregroundStyle(isSelected ? .primary : .secondary)
-
-                Text(style.selectorPreview)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.72)
-            }
-            .frame(maxWidth: .infinity, minHeight: 58, alignment: .leading)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .contentMaterialSurface(
-                cornerRadius: 13,
-                tint: isSelected
-                    ? .secondary.opacity(0.16)
-                    : (isHovered ? .primary.opacity(0.08) : .clear)
-            )
-            .overlay {
-                if isSelected {
-                    RoundedRectangle(cornerRadius: 13, style: .continuous)
-                        .stroke(.tertiary, lineWidth: 1)
-                }
-            }
-        }
-        .buttonStyle(.plain)
-        .onHover { isHovered = $0 }
     }
 }
 
@@ -515,6 +328,7 @@ struct SourceSummaryGroupView: View {
     let model: SourceSummaryGroupViewModel
     let codexDashboard: CodexDashboardMetrics
     let onToggle: (() -> Void)?
+    let onOpenPricing: (() -> Void)?
     let successBadgeColor: Color
     let useCustomSkin: Bool
     let customSkinAccentColor: Color
@@ -526,6 +340,7 @@ struct SourceSummaryGroupView: View {
         successBadgeColor: Color = Color(nsColor: .systemGreen),
         useCustomSkin: Bool = false,
         customSkinAccentColor: Color = Color(nsColor: .systemGreen),
+        onOpenPricing: (() -> Void)? = nil,
         onToggle: (() -> Void)? = nil
     ) {
         self.model = model
@@ -533,6 +348,7 @@ struct SourceSummaryGroupView: View {
         self.successBadgeColor = successBadgeColor
         self.useCustomSkin = useCustomSkin
         self.customSkinAccentColor = customSkinAccentColor
+        self.onOpenPricing = onOpenPricing
         self.onToggle = onToggle
     }
 
@@ -549,9 +365,13 @@ struct SourceSummaryGroupView: View {
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(.primary)
 
+                    if model.source == .codex {
+                        purchaseBadgeButton()
+                    }
+
                     Spacer(minLength: 8)
 
-                    Text("余: \(model.remainingValue)")
+                    Text("余: \(displayRemainingValue)")
                         .font(.system(size: 10.5, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(.secondary)
@@ -563,18 +383,18 @@ struct SourceSummaryGroupView: View {
             }
             .buttonStyle(.plain)
 
-            if !model.footerText.isEmpty {
-                Text(model.footerText)
+            if !displayFooterText.isEmpty {
+                Text(displayFooterText)
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
 
             if model.isExpanded {
-                if model.source == .codex, hasCodexDashboardData {
+                if model.source == .codex {
                     codexExpandedContent
-                } else {
-                    defaultExpandedContent
+                } else if model.source == .agi {
+                    agiExpandedContent
                 }
             }
         }
@@ -589,67 +409,9 @@ struct SourceSummaryGroupView: View {
         )
     }
 
-    private var defaultExpandedContent: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            WeightedMetricRowLayout(weights: [3, 3, 4], spacing: 8) {
-                ForEach(Array(summaryCards.enumerated()), id: \.offset) { _, card in
-                    metricCard(title: card.title, value: card.value, lineLimit: card.lineLimit)
-                }
-            }
-
-            if !model.packageItems.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("套餐")
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .foregroundStyle(.secondary)
-
-                    ForEach(Array(model.packageItems.enumerated()), id: \.offset) { _, item in
-                        HStack(alignment: .center, spacing: 8) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(item.title)
-                                    .font(.system(size: 12, weight: .semibold))
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-
-                                Text(item.subtitle)
-                                    .font(.system(size: 10, weight: .medium, design: .rounded))
-                                    .monospacedDigit()
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.leading)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-
-                            Spacer(minLength: 6)
-
-                            statusBadgeText(item.badgeText, tone: item.badgeTone)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .summaryDashboardSurface(
-                            cornerRadius: 13,
-                            colorScheme: colorScheme,
-                            elevated: true,
-                            useCustomSkin: useCustomSkin,
-                            customAccent: customSkinAccentColor
-                        )
-                    }
-                }
-            }
-
-            usageProgressCard(
-                title: model.progressLabel,
-                prefixText: model.progressPrefix,
-                valueText: model.progressValue,
-                progress: model.progress ?? 0
-            )
-        }
-    }
-
     private var codexExpandedContent: some View {
         VStack(alignment: .leading, spacing: 8) {
-            codexSubscriptionSummaryCard
+            packageSummaryList
 
             WeightedMetricRowLayout(weights: [1, 1], spacing: 8) {
                 quotaMetricCard(
@@ -696,6 +458,24 @@ struct SourceSummaryGroupView: View {
                     metricCard(title: tile.title, value: tile.value, symbol: tile.symbol, tint: tile.tint)
                 }
             }
+        }
+    }
+
+    private var agiExpandedContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            packageSummaryList
+
+            WeightedMetricRowLayout(weights: [1, 1], spacing: 8) {
+                ForEach(Array(agiSummaryCards.enumerated()), id: \.offset) { _, card in
+                    metricCard(
+                        title: card.title,
+                        value: card.value,
+                        lineLimit: card.lineLimit,
+                        symbol: card.symbol,
+                        tint: card.tint
+                    )
+                }
+            }
 
             usageProgressCard(
                 title: model.progressLabel,
@@ -706,21 +486,30 @@ struct SourceSummaryGroupView: View {
         }
     }
 
-    private var codexSubscriptionSummaryCard: some View {
+    private var packageSummaryList: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            let items = displayPackageItems
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                packageSummaryCard(item)
+            }
+        }
+    }
+
+    private func packageSummaryCard(_ item: SummaryPackageItem) -> some View {
         HStack(alignment: .center, spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 6) {
-                    Text("codex \(model.packageItems.first?.title ?? "Basic") 订阅")
+                    Text(packageTitleText(for: item))
                         .font(.system(size: 13, weight: .bold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
-                    if let badge = model.packageItems.first?.badgeText, !badge.isEmpty {
-                        statusBadgeText(badge, tone: model.packageItems.first?.badgeTone ?? .neutral)
+                    if !item.badgeText.isEmpty {
+                        statusBadgeText(item.badgeText, tone: item.badgeTone)
                     }
                 }
 
-                Text(model.packageItems.first?.subtitle ?? "到期 \(model.renewalValue)")
+                Text(item.subtitle)
                     .font(.system(size: 10.5, weight: .medium, design: .rounded))
                     .monospacedDigit()
                     .foregroundStyle(.secondary)
@@ -729,7 +518,7 @@ struct SourceSummaryGroupView: View {
 
             Spacer(minLength: 6)
 
-            Text("\(currencyAmountText(codexDashboard.dailyTotalQuota ?? 0))/天")
+            Text(packageTrailingText)
                 .font(.system(size: 13, weight: .bold, design: .rounded))
                 .monospacedDigit()
                 .foregroundStyle(.primary)
@@ -744,6 +533,56 @@ struct SourceSummaryGroupView: View {
             useCustomSkin: useCustomSkin,
             customAccent: customSkinAccentColor
         )
+    }
+
+    private var displayPackageItems: [SummaryPackageItem] {
+        if !model.packageItems.isEmpty {
+            return model.packageItems
+        }
+
+        return [
+            SummaryPackageItem(
+                title: model.source == .codex ? "Basic" : "AGI 套餐",
+                subtitle: "到期 \(model.renewalValue)",
+                badgeText: "",
+                badgeTone: .neutral
+            ),
+        ]
+    }
+
+    private func packageTitleText(for item: SummaryPackageItem) -> String {
+        switch model.source {
+        case .codex:
+            return "codex \(item.title) 订阅"
+        case .agi:
+            return item.title
+        }
+    }
+
+    private var packageTrailingText: String {
+        switch model.source {
+        case .codex:
+            return codexDailyLimitText
+        case .agi:
+            return agiPackageLimitText
+        }
+    }
+
+    private var codexDailyLimitText: String {
+        guard let dailyTotalQuota = codexDashboard.dailyTotalQuota, dailyTotalQuota.isFinite else {
+            return "--/天"
+        }
+        return "\(currencyAmountText(dailyTotalQuota))/天"
+    }
+
+    private var agiPackageLimitText: String {
+        let parts = model.usageValue.split(separator: "/", maxSplits: 1).map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard parts.count == 2, !parts[1].isEmpty else {
+            return "--"
+        }
+        return formattedAGIByteText(parts[1])
     }
 
     private func quotaMetricCard(
@@ -903,66 +742,93 @@ struct SourceSummaryGroupView: View {
         let title: String
         let value: String
         let lineLimit: Int
+        let symbol: String?
+        let tint: Color?
+
+        init(
+            title: String,
+            value: String,
+            lineLimit: Int,
+            symbol: String? = nil,
+            tint: Color? = nil
+        ) {
+            self.title = title
+            self.value = value
+            self.lineLimit = lineLimit
+            self.symbol = symbol
+            self.tint = tint
+        }
     }
 
-    private var summaryCards: [MetricCardContent] {
-        if model.source == .codex, hasCodexDashboardData {
-            return codexSummaryCards
-        }
-        return [
-            MetricCardContent(title: "剩余", value: model.remainingValue, lineLimit: 1),
-            MetricCardContent(title: model.usageLabel, value: model.usageValue, lineLimit: 1),
-            MetricCardContent(title: model.renewalLabel, value: model.renewalValue, lineLimit: 2),
+    private var agiSummaryCards: [MetricCardContent] {
+        [
+            MetricCardContent(
+                title: "剩余字节",
+                value: displayRemainingValue,
+                lineLimit: 1,
+                symbol: "tray.full",
+                tint: Color(hex: 0x57BF71)
+            ),
+            MetricCardContent(
+                title: model.usageLabel,
+                value: formattedAGIUsageValue,
+                lineLimit: 1,
+                symbol: "chart.bar",
+                tint: Color(hex: 0x3B82F6)
+            ),
         ]
     }
 
-    private var codexSummaryCards: [MetricCardContent] {
-        let dailyRatio = quotaRatioText(used: codexDashboard.dailyUsedQuota, total: codexDashboard.dailyTotalQuota)
-            ?? currencyRatioText(from: model.usageValue)
-        let weeklyRawRatio = quotaRatioText(used: codexDashboard.weeklyUsedQuota, total: codexDashboard.weeklyTotalQuota)
-            ?? model.progressPrefix
-            ?? model.usageValue
-        let weeklyRatio = currencyRatioText(from: weeklyRawRatio)
-        let dailyPercent = quotaPercentText(
-            directPercent: codexDashboard.dailyUsedPercent,
-            used: codexDashboard.dailyUsedQuota,
-            total: codexDashboard.dailyTotalQuota
-        )
-        let weeklyPercent = quotaPercentText(
-            directPercent: codexDashboard.weeklyUsedPercent,
-            used: codexDashboard.weeklyUsedQuota,
-            total: codexDashboard.weeklyTotalQuota
-        ) ?? (model.progressValue == "--" ? nil : model.progressValue)
-        let requestCountText = codexDashboard.requestCount.map { "\($0) 次" } ?? "--"
-
-        return [
-            MetricCardContent(
-                title: "今日配额",
-                value: quotaValueText(ratio: dailyRatio, percent: dailyPercent),
-                lineLimit: 2
-            ),
-            MetricCardContent(
-                title: "本周配额",
-                value: quotaValueText(ratio: weeklyRatio, percent: weeklyPercent),
-                lineLimit: 2
-            ),
-            MetricCardContent(title: "今日请求次数", value: requestCountText, lineLimit: 1),
-        ]
-    }
-
-    private var hasCodexDashboardData: Bool {
-        codexDashboard.dailyUsedQuota != nil
-            || codexDashboard.dailyTotalQuota != nil
-            || codexDashboard.weeklyUsedQuota != nil
-            || codexDashboard.weeklyTotalQuota != nil
-            || codexDashboard.requestCount != nil
-    }
-
-    private func quotaValueText(ratio: String, percent: String?) -> String {
-        guard let percent, !percent.isEmpty else {
-            return ratio
+    private var displayRemainingValue: String {
+        guard model.source == .agi else {
+            return model.remainingValue
         }
-        return "\(ratio) · \(percent)"
+        return formattedAGIByteText(model.remainingValue)
+    }
+
+    private var displayFooterText: String {
+        guard model.source == .codex, model.footerText == "请先设置 API Key" else {
+            return model.footerText
+        }
+        return "请先设置 Codex API Key"
+    }
+
+    private var formattedAGIUsageValue: String {
+        let parts = model.usageValue.split(separator: "/", maxSplits: 1).map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard parts.count == 2 else {
+            return formattedAGIByteText(model.usageValue)
+        }
+        return "\(formattedAGIByteText(parts[0]))/\(formattedAGIByteText(parts[1]))"
+    }
+
+    private func formattedAGIByteText(_ rawValue: String) -> String {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed != "--" else {
+            return trimmed.isEmpty ? "--" : trimmed
+        }
+
+        let hasByteSuffix = trimmed.uppercased().hasSuffix("B")
+        let numericText = (hasByteSuffix ? String(trimmed.dropLast()) : trimmed)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: ",", with: "")
+
+        guard let value = Double(numericText), value.isFinite else {
+            return trimmed
+        }
+
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.numberStyle = .decimal
+        formatter.usesGroupingSeparator = true
+        formatter.groupingSeparator = ","
+        formatter.maximumFractionDigits = 0
+        formatter.minimumFractionDigits = 0
+
+        let roundedValue = Int64(value.rounded())
+        let numberText = formatter.string(from: NSNumber(value: roundedValue)) ?? "\(roundedValue)"
+        return hasByteSuffix ? "\(numberText) B" : numberText
     }
 
     private func quotaRatioText(used: Double?, total: Double?) -> String? {
@@ -1108,6 +974,22 @@ struct SourceSummaryGroupView: View {
                 Capsule().stroke(palette.border, lineWidth: 0.8)
             }
             .clipShape(Capsule())
+    }
+
+    private func purchaseBadgeButton() -> some View {
+        Button(action: { onOpenPricing?() }) {
+            Text("去购买")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(successBadgeColor)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(successBadgeColor.opacity(0.22))
+                .overlay {
+                    Capsule().stroke(successBadgeColor.opacity(0.32), lineWidth: 0.8)
+                }
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private func badgePalette(for tone: SummaryStatusTone) -> (text: Color, fill: Color, border: Color) {
@@ -1970,7 +1852,8 @@ struct MonitorDashboardShellView: View {
                         codexDashboard: model.codexDashboard,
                         successBadgeColor: successBadgeColor,
                         useCustomSkin: isCustomSkinSelected,
-                        customSkinAccentColor: customSkinColor
+                        customSkinAccentColor: customSkinColor,
+                        onOpenPricing: onOpenPricing
                     ) {
                         onToggleSourceGroup?(group.source)
                     }
@@ -1982,7 +1865,8 @@ struct MonitorDashboardShellView: View {
                         codexDashboard: group.source == .codex ? model.codexDashboard : .empty,
                         successBadgeColor: successBadgeColor,
                         useCustomSkin: isCustomSkinSelected,
-                        customSkinAccentColor: customSkinColor
+                        customSkinAccentColor: customSkinColor,
+                        onOpenPricing: onOpenPricing
                     ) {
                         onToggleSourceGroup?(group.source)
                     }
@@ -2542,7 +2426,7 @@ struct MonitorDashboardShellView: View {
 
     private var codexExpandedLayout: some View {
         VStack(alignment: .leading, spacing: 12) {
-            subscriptionSummaryCard
+            subscriptionSummaryList
 
             HStack(spacing: 12) {
                 quotaCard(
@@ -2574,21 +2458,28 @@ struct MonitorDashboardShellView: View {
         }
     }
 
-    private var subscriptionSummaryCard: some View {
+    private var subscriptionSummaryList: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            let items = codexPanelPackageItems
+            ForEach(Array(items.enumerated()), id: \.offset) { _, item in
+                subscriptionSummaryCard(item)
+            }
+        }
+    }
+
+    private func subscriptionSummaryCard(_ item: SummaryPackageItem) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 10) {
-                Text(subscriptionTitleText)
+                Text("codex \(item.title) 订阅")
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
 
-                Text(remainingDaysBadgeText)
-                    .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(Color(hex: 0x2D8D63))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color(hex: 0x2D8D63).opacity(0.22))
-                    .clipShape(Capsule())
+                if !item.badgeText.isEmpty {
+                    packageBadgeText(item.badgeText, tone: item.badgeTone)
+                }
+
+                purchaseBadgeButton()
 
                 Spacer(minLength: 8)
 
@@ -2597,7 +2488,7 @@ struct MonitorDashboardShellView: View {
                     .foregroundStyle(.primary)
             }
 
-            Text(validityLineText)
+            Text(item.subtitle)
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
@@ -2612,6 +2503,50 @@ struct MonitorDashboardShellView: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .stroke(separatorColor, lineWidth: 1)
         }
+    }
+
+    private var codexPanelPackageItems: [SummaryPackageItem] {
+        if !model.packageItems.isEmpty {
+            return model.packageItems
+        }
+
+        return [
+            SummaryPackageItem(
+                title: "Basic",
+                subtitle: "到期 \(model.renewalValue)",
+                badgeText: "",
+                badgeTone: .neutral
+            ),
+        ]
+    }
+
+    private func packageBadgeText(_ text: String, tone: SummaryStatusTone) -> some View {
+        Text(text)
+            .font(.system(size: 11.5, weight: .semibold))
+            .foregroundStyle(tone.swiftUIColor)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(tone.swiftUIFillColor)
+            .overlay {
+                Capsule().stroke(tone.swiftUIBorderColor, lineWidth: 0.8)
+            }
+            .clipShape(Capsule())
+    }
+
+    private func purchaseBadgeButton() -> some View {
+        Button(action: { onOpenPricing?() }) {
+            Text("去购买")
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(successBadgeColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(successBadgeColor.opacity(0.22))
+                .overlay {
+                    Capsule().stroke(successBadgeColor.opacity(0.32), lineWidth: 0.8)
+                }
+                .clipShape(Capsule())
+        }
+        .buttonStyle(.plain)
     }
 
     private func quotaCard(
@@ -2814,18 +2749,6 @@ struct MonitorDashboardShellView: View {
         return model.progressValue
     }
 
-    private var subscriptionTitleText: String {
-        let packageName = model.packageItems.first?.title ?? "Basic"
-        return "codex \(packageName) 订阅"
-    }
-
-    private var remainingDaysBadgeText: String {
-        if let badge = model.packageItems.first?.badgeText, !badge.isEmpty {
-            return badge
-        }
-        return "93天"
-    }
-
     private var dailyPriceText: String {
         if let total = codexDashboard.dailyTotalQuota {
             guard total.isFinite else {
@@ -2846,13 +2769,6 @@ struct MonitorDashboardShellView: View {
         guard totalWidth.isFinite, totalWidth > 0, progress.isFinite else { return 8 }
         let clamped = max(0, min(1, progress))
         return max(8, totalWidth * clamped)
-    }
-
-    private var validityLineText: String {
-        if let subtitle = model.packageItems.first?.subtitle, !subtitle.isEmpty {
-            return subtitle
-        }
-        return "到期 \(model.renewalValue) · 剩余 \(remainingDaysBadgeText)"
     }
 
     private struct MetricTile {
@@ -3013,9 +2929,10 @@ struct MonitorDashboardShellView: View {
                 .frame(maxWidth: .infinity, minHeight: 160)
                 .padding(.vertical, 16)
             } else {
-                VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 0) {
                     ForEach(panel.records, id: \.id) { item in
                         usageRecordRow(item)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 8)
                         if item.id != panel.records.last?.id {
@@ -3041,19 +2958,28 @@ struct MonitorDashboardShellView: View {
         }
     }
 
+    private var usageRecordsTableColumnWeights: [CGFloat] {
+        [1.7, 1.25, 2.1, 2.3, 0.65]
+    }
+
     private var usageRecordsTableHeader: some View {
-        HStack(alignment: .center, spacing: 10) {
-            usageHeaderTitle("时间")
-                .frame(width: 170, alignment: .leading)
-            usageHeaderTitle("模型")
-                .frame(width: 130, alignment: .leading)
-            usageHeaderTitle("Tokens")
-                .frame(minWidth: 170, alignment: .leading)
-            usageHeaderTitle("费用")
-                .frame(minWidth: 180, alignment: .leading)
-            usageHeaderTitle("明细")
-                .frame(width: 52, alignment: .trailing)
+        GeometryReader { proxy in
+            let columnWidths = usageRecordsTableColumnWidths(for: proxy.size.width)
+            HStack(alignment: .center, spacing: usageRecordsTableColumnSpacing) {
+                usageHeaderTitle("时间")
+                    .frame(width: columnWidths[0], alignment: .leading)
+                usageHeaderTitle("模型")
+                    .frame(width: columnWidths[1], alignment: .leading)
+                usageHeaderTitle("Tokens")
+                    .frame(width: columnWidths[2], alignment: .leading)
+                usageHeaderTitle("费用")
+                    .frame(width: columnWidths[3], alignment: .leading)
+                usageHeaderTitle("明细")
+                    .frame(width: columnWidths[4], alignment: .leading)
+            }
+            .frame(width: proxy.size.width, alignment: .leading)
         }
+        .frame(height: 14)
     }
 
     private func usageHeaderTitle(_ text: String) -> some View {
@@ -3063,72 +2989,89 @@ struct MonitorDashboardShellView: View {
     }
 
     private func usageRecordRow(_ item: CodexUsageRecordViewModel) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Text(item.timestampText)
-                .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .frame(width: 170, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.modelText)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                Text(item.tierText)
-                    .font(.system(size: 10, weight: .medium))
+        GeometryReader { proxy in
+            let columnWidths = usageRecordsTableColumnWidths(for: proxy.size.width)
+            HStack(alignment: .top, spacing: usageRecordsTableColumnSpacing) {
+                Text(item.timestampText)
+                    .font(.system(size: 11.5, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
-            }
-            .frame(width: 130, alignment: .leading)
+                    .frame(width: columnWidths[0], alignment: .leading)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(formattedUsageLogTokenText(for: item))
-                    .font(.system(size: 12.5, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .monospacedDigit()
-                Text(formattedTokenBreakdownText(item.tokenBreakdownText))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            .frame(minWidth: 170, alignment: .leading)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.totalCostText)
-                    .font(.system(size: 12.5, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .monospacedDigit()
-                Text(item.costBreakdownText)
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-            .frame(minWidth: 180, alignment: .leading)
-
-            Button(action: {
-                if let detailURL = item.detailURL, !detailURL.isEmpty {
-                    onOpenUsageLogDetail?(detailURL)
-                } else {
-                    onOpenDashboard?()
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.modelText)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    Text(item.tierText)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                 }
-            }) {
-                Text("明细")
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(successBadgeColor)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(successBadgeColor.opacity(0.12))
-                    .overlay {
-                        Capsule().stroke(successBadgeColor.opacity(0.22), lineWidth: 0.8)
+                .frame(width: columnWidths[1], alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(formattedUsageLogTokenText(for: item))
+                        .font(.system(size: 12.5, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .monospacedDigit()
+                    Text(formattedTokenBreakdownText(item.tokenBreakdownText))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                .frame(width: columnWidths[2], alignment: .leading)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(item.totalCostText)
+                        .font(.system(size: 12.5, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                        .monospacedDigit()
+                    Text(item.costBreakdownText)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+                .frame(width: columnWidths[3], alignment: .leading)
+
+                Button(action: {
+                    if let detailURL = item.detailURL, !detailURL.isEmpty {
+                        onOpenUsageLogDetail?(detailURL)
+                    } else {
+                        onOpenDashboard?()
                     }
-                    .clipShape(Capsule())
+                }) {
+                    Text("明细")
+                        .font(.system(size: 10.5, weight: .semibold))
+                        .foregroundStyle(successBadgeColor)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(successBadgeColor.opacity(0.12))
+                        .overlay {
+                            Capsule().stroke(successBadgeColor.opacity(0.22), lineWidth: 0.8)
+                        }
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .frame(width: columnWidths[4], alignment: .leading)
             }
-            .buttonStyle(.plain)
-            .frame(width: 52, alignment: .trailing)
+            .frame(width: proxy.size.width, alignment: .leading)
         }
+        .frame(height: 48)
+    }
+
+    private var usageRecordsTableColumnSpacing: CGFloat {
+        10
+    }
+
+    private func usageRecordsTableColumnWidths(for totalWidth: CGFloat) -> [CGFloat] {
+        let weights = usageRecordsTableColumnWeights
+        let totalSpacing = usageRecordsTableColumnSpacing * CGFloat(max(weights.count - 1, 0))
+        let contentWidth = max(0, totalWidth - totalSpacing)
+        let weightSum = max(weights.reduce(CGFloat.zero, +), 1)
+        return weights.map { contentWidth * ($0 / weightSum) }
     }
 
     @ViewBuilder

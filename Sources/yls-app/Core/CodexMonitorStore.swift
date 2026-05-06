@@ -27,28 +27,11 @@ final class CodexMonitorStore {
         .agi: true,
     ]
 
-    private(set) var latestUsage = "--"
-    private(set) var latestRemaining = "--"
     private(set) var latestDailyRemaining = "--"
     private(set) var latestWeeklyRemaining = "--"
-    private(set) var latestRenewal = "--"
-    private(set) var latestMessage = "等待数据"
-    private(set) var latestUsageLabel = "已用/总"
-    private(set) var latestProgressLabel = "用量进度"
-    private(set) var latestProgressPrefix: String?
-    private(set) var latestEmail: String?
-    private(set) var latestPackageItems: [SummaryPackageItem] = []
-    private(set) var latestUsedPercent: Double?
     private(set) var usageLogsPage: Int = 1
     private(set) var usageLogsPageSize: Int = 20
     private(set) var usageLogsPanel: CodexUsageRecordsPanelViewModel = .empty
-
-    private(set) var agiLatestUsage = "--"
-    private(set) var agiLatestRemaining = "--"
-    private(set) var agiLatestRenewal = "--"
-    private(set) var agiLatestMessage = ""
-    private(set) var agiLatestPackageItems: [SummaryPackageItem] = []
-    private(set) var agiLatestUsedPercent: Double?
 
     private(set) var isEmailVisible = false
 
@@ -129,10 +112,6 @@ final class CodexMonitorStore {
         notifyStateChanged()
     }
 
-    func setAPIKey(_ value: String) {
-        setAPIKey(value, for: .codex)
-    }
-
     func setAPIKey(_ value: String, for source: PackageSource) {
         let normalized = Self.normalizeAPIKey(value)
         switch source {
@@ -147,10 +126,6 @@ final class CodexMonitorStore {
         persistConfiguration()
         initializeStatusFallback()
         refreshNow()
-    }
-
-    func setAGIKey(_ value: String) {
-        setAPIKey(value, for: .agi)
     }
 
     @discardableResult
@@ -275,17 +250,6 @@ final class CodexMonitorStore {
             displayEmail = "--"
         }
 
-        let (statusText, statusTone) = statisticsDisplayMode == .dual
-            ? aggregateSummaryStatus()
-            : summaryStatus(for: currentSource)
-        let renewalLabel = activeState.packageItems.count > 1 ? "最近到期" : "下次续费 / 到期"
-        let packageSectionTitle: String? = if activeState.packageItems.isEmpty {
-            nil
-        } else {
-            activeState.packageItems.count == 1
-                ? "当前\(currentSource.settingsTitle)套餐"
-                : "\(currentSource.settingsTitle)有效套餐（\(activeState.packageItems.count)）"
-        }
         let sourceGroups = PackageSource.allCases.map { source -> SourceSummaryGroupViewModel in
             let sourceState = state(for: source)
             let status = summaryStatus(for: source)
@@ -315,36 +279,25 @@ final class CodexMonitorStore {
         }
 
         return StatusSummaryViewModel(
-            title: AppMeta.displayName,
             currentSource: currentSource,
             currentSourceTitle: currentSource.chipTitle,
             statisticsDisplayMode: statisticsDisplayMode,
-            statisticsModeText: statisticsDisplayMode.fullTitle,
-            statusText: statusText,
-            statusTone: statusTone,
             emailText: displayEmail,
             canToggleEmail: activeState.email?.isEmpty == false,
             isEmailVisible: isEmailVisible,
-            usageLabel: activeState.usageLabel,
             usageValue: activeState.usage,
-            remainingValue: activeState.remaining,
-            renewalLabel: renewalLabel,
             renewalValue: activeState.renewal,
-            packageSectionTitle: packageSectionTitle,
             packageItems: activeState.packageItems,
             progressLabel: activeState.progressLabel,
             progressPrefix: activeState.progressPrefix,
             progressValue: progressValue,
             progress: activeState.usedPercent.map { max(0, min(100, $0)) / 100 },
             footerText: activeState.message,
-            hasAPIKey: !apiKey.isEmpty,
-            hasAGIKey: !agiAPIKey.isEmpty,
             codexAPIKeyStatusText: apiKeyStatusText(for: .codex),
             agiAPIKeyStatusText: apiKeyStatusText(for: .agi),
             codexAPIKeyMaskedText: Self.maskedAPIKey(apiKey),
             agiAPIKeyMaskedText: Self.maskedAPIKey(agiAPIKey),
             pollIntervalSeconds: pollInterval,
-            pollIntervalText: "\(Int(pollInterval)) 秒",
             launchAtLoginEnabled: launchAtLoginEnabled,
             launchAtLoginSupported: supportsLaunchAtLogin,
             launchAtLoginUnavailableReason: launchAtLoginUnavailableReason,
@@ -353,14 +306,9 @@ final class CodexMonitorStore {
             statusBarManualColorHex: statusBarManualColorHex,
             statusBarColorText: currentStatusBarColorText(),
             panelMode: panelMode,
-            mcpStatusText: mcpStatusText,
             mcpEnabled: mcpEnabled,
             mcpPort: mcpPort,
-            canOpenDashboard: currentSource.dashboardURL != nil,
-            canOpenPricing: currentSource.pricingURL != nil,
-            dashboardActionTitle: currentSource.openDashboardTitle,
             sourceGroups: sourceGroups,
-            mountedModules: [],
             codexDashboard: codexDashboard,
             codexUsageRecords: usageLogsPanel
         )
@@ -485,7 +433,7 @@ final class CodexMonitorStore {
     private func refreshCodexUsageLogsNow(page: Int) async {
         let normalizedPage = max(1, page)
         guard !apiKey.isEmpty else {
-            usageLogsPanel = .error("请先设置 API Key", page: normalizedPage, pageSize: usageLogsPageSize)
+            usageLogsPanel = .error("请先设置 Codex API Key", page: normalizedPage, pageSize: usageLogsPageSize)
             notifyStateChanged()
             return
         }
@@ -709,18 +657,8 @@ final class CodexMonitorStore {
         state.fallbackText = resolvedDailyRemaining == "--" ? statusFallbackText : "日余：\(resolvedDailyRemaining)"
         sourceStates[.codex] = state
 
-        latestUsage = usage
-        latestRemaining = remaining
         latestDailyRemaining = resolvedDailyRemaining
         latestWeeklyRemaining = weeklyRemaining ?? "--"
-        latestRenewal = renewal
-        latestMessage = message
-        latestUsageLabel = usageLabel
-        latestProgressLabel = progressLabel
-        latestProgressPrefix = progressPrefix
-        latestEmail = email
-        latestPackageItems = packageItems
-        latestUsedPercent = usedPercent
         syncLatestFieldsFromActiveSource()
         notifyStateChanged()
     }
@@ -738,7 +676,7 @@ final class CodexMonitorStore {
         state.remaining = remaining
         state.renewal = renewal
         state.message = message
-        state.usageLabel = "已用/总字节"
+        state.usageLabel = "已用字节/总字节"
         state.progressLabel = "AGI 用量进度"
         state.progressPrefix = nil
         state.email = nil
@@ -750,12 +688,6 @@ final class CodexMonitorStore {
         state.fallbackText = remaining == "--" ? "AGI: \(message.isEmpty ? "未配置Key" : "异常")" : "余: \(remaining)"
         sourceStates[.agi] = state
 
-        agiLatestUsage = usage
-        agiLatestRemaining = remaining
-        agiLatestRenewal = renewal
-        agiLatestMessage = message
-        agiLatestPackageItems = packageItems
-        agiLatestUsedPercent = usedPercent
         syncLatestFieldsFromActiveSource()
         notifyStateChanged()
     }
@@ -765,12 +697,6 @@ final class CodexMonitorStore {
         if !message.isEmpty {
             sourceStates[.agi]?.message = message
         }
-        agiLatestUsage = "--"
-        agiLatestRemaining = "--"
-        agiLatestRenewal = "--"
-        agiLatestMessage = message
-        agiLatestPackageItems = []
-        agiLatestUsedPercent = nil
         syncLatestFieldsFromActiveSource()
         notifyStateChanged()
     }
@@ -842,17 +768,6 @@ final class CodexMonitorStore {
     }
 
     private func syncLatestFieldsFromActiveSource() {
-        let activeState = state(for: currentSource)
-        latestUsage = activeState.usage
-        latestRemaining = activeState.remaining
-        latestRenewal = activeState.renewal
-        latestMessage = activeState.message
-        latestUsageLabel = activeState.usageLabel
-        latestProgressLabel = activeState.progressLabel
-        latestProgressPrefix = activeState.progressPrefix
-        latestEmail = activeState.email
-        latestPackageItems = activeState.packageItems
-        latestUsedPercent = activeState.usedPercent
         statusFallbackText = statusBarSnapshot().fallbackText
     }
 

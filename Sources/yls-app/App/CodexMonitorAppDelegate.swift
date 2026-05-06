@@ -344,10 +344,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         NSWorkspace.shared.open(url)
     }
 
-    @objc private func handleOpenPricing() {
-        guard let rawURL = store.currentSource.pricingURL,
-              let url = URL(string: rawURL) else {
-            showError("续费链接无效")
+    private func handleOpenPricing() {
+        guard let url = URL(string: AppMeta.pricingURL) else {
+            showError("购买链接无效")
             return
         }
         NSWorkspace.shared.open(url)

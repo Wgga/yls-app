@@ -103,14 +103,6 @@ enum PackageSource: String, CaseIterable {
         }
     }
 
-    var openDashboardTitle: String {
-        switch self {
-        case .codex:
-            return "打开 Codex 控制台"
-        case .agi:
-            return "打开套餐控制台"
-        }
-    }
 }
 
 enum StatusDisplayStyle: Int, CaseIterable {
@@ -126,21 +118,6 @@ enum StatusDisplayStyle: Int, CaseIterable {
     case dailyRemainingPercent = 9
     case weeklyUsedAmount = 10
     case weeklyRemainingAmount = 11
-
-    static let selectorOrder: [StatusDisplayStyle] = [
-        .dailyUsedAmount,
-        .dailyRemainingAmount,
-        .dailyUsedCircle,
-        .dailyRemainingCircle,
-        .dailyUsedPercent,
-        .dailyRemainingPercent,
-        .weeklyUsedAmount,
-        .weeklyRemainingAmount,
-        .weeklyUsedCircle,
-        .weeklyRemainingCircle,
-        .weeklyUsedPercent,
-        .weeklyRemainingPercent
-    ]
 
     enum TimeRange: String, CaseIterable {
         case daily
@@ -336,63 +313,6 @@ enum StatusDisplayStyle: Int, CaseIterable {
         }
     }
 
-    var selectorSymbol: String {
-        switch self {
-        case .dailyUsedAmount:
-            return "banknote"
-        case .dailyRemainingAmount:
-            return "text.alignleft"
-        case .dailyUsedCircle:
-            return "gauge.with.dots.needle.bottom.50percent"
-        case .dailyRemainingCircle:
-            return "gauge"
-        case .dailyUsedPercent:
-            return "chart.bar.fill"
-        case .dailyRemainingPercent:
-            return "chart.bar.doc.horizontal"
-        case .weeklyUsedAmount:
-            return "banknote.fill"
-        case .weeklyRemainingAmount:
-            return "text.alignright"
-        case .weeklyUsedCircle:
-            return "smallcircle.filled.circle"
-        case .weeklyRemainingCircle:
-            return "smallcircle.circle"
-        case .weeklyUsedPercent:
-            return "chart.bar.xaxis"
-        case .weeklyRemainingPercent:
-            return "chart.xyaxis.line"
-        }
-    }
-
-    var selectorPreview: String {
-        switch self {
-        case .dailyUsedAmount:
-            return "日用：9.53"
-        case .dailyRemainingAmount:
-            return "日余：90.47"
-        case .dailyUsedCircle:
-            return "圆环 + 日用"
-        case .dailyRemainingCircle:
-            return "圆环 + 日余"
-        case .dailyUsedPercent:
-            return "日用：9.53%"
-        case .dailyRemainingPercent:
-            return "日余：90.47%"
-        case .weeklyUsedAmount:
-            return "周用：14.06"
-        case .weeklyRemainingAmount:
-            return "周余：85.94"
-        case .weeklyUsedCircle:
-            return "圆环 + 周用"
-        case .weeklyRemainingCircle:
-            return "圆环 + 周余"
-        case .weeklyUsedPercent:
-            return "周用：14.06%"
-        case .weeklyRemainingPercent:
-            return "周余：85.94%"
-        }
-    }
 }
 
 enum MenuPanelMode {
@@ -443,24 +363,6 @@ enum StatisticsDisplayMode: Int, CaseIterable {
         case .dual:
             return "双显模式"
         }
-    }
-}
-
-enum StatisticsGroupKind: String, CaseIterable, Hashable {
-    case codex
-    case agi
-}
-
-struct StatisticsGroupAccessory {
-    let text: String
-    let tone: SummaryStatusTone?
-
-    static func label(_ text: String) -> StatisticsGroupAccessory {
-        StatisticsGroupAccessory(text: text, tone: nil)
-    }
-
-    static func status(_ text: String, tone: SummaryStatusTone) -> StatisticsGroupAccessory {
-        StatisticsGroupAccessory(text: text, tone: tone)
     }
 }
 
@@ -597,6 +499,29 @@ struct AGIPackageEnvelope: Decodable {
     let code: Int?
     let message: String?
     let data: AGIPackageData?
+
+    enum CodingKeys: String, CodingKey {
+        case code
+        case message
+        case msg
+        case data
+        case row
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        code = try container.decodeIfPresent(Int.self, forKey: .code)
+        message = try container.decodeIfPresent(String.self, forKey: .message)
+            ?? container.decodeIfPresent(String.self, forKey: .msg)
+
+        if let decodedData = try container.decodeIfPresent(AGIPackageData.self, forKey: .data) {
+            data = decodedData
+        } else if let row = try container.decodeIfPresent([AGIPackageItem].self, forKey: .row) {
+            data = AGIPackageData(packages: row, summary: nil)
+        } else {
+            data = nil
+        }
+    }
 }
 
 struct AGIPackageData: Decodable {
@@ -618,9 +543,11 @@ struct AGIPackageItem: Decodable {
     let type: String?
 
     enum CodingKeys: String, CodingKey {
+        case id = "_id"
         case pkgID = "pkg_id"
         case orderClass = "order_class"
         case level
+        case byte
         case byteTotal = "byte_total"
         case byteRemaining = "byte_remaining"
         case byteUsed = "byte_used"
@@ -629,6 +556,31 @@ struct AGIPackageItem: Decodable {
         case createTime
         case reason
         case type
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        pkgID = try container.decodeIfPresent(String.self, forKey: .pkgID)
+            ?? container.decodeIfPresent(String.self, forKey: .id)
+        orderClass = try container.decodeIfPresent(String.self, forKey: .orderClass)
+        level = try container.decodeIfPresent(Int.self, forKey: .level)
+        byteTotal = try container.decodeIfPresent(FlexibleNumber.self, forKey: .byteTotal)
+        byteRemaining = try container.decodeIfPresent(FlexibleNumber.self, forKey: .byteRemaining)
+            ?? container.decodeIfPresent(FlexibleNumber.self, forKey: .byte)
+
+        if let explicitUsed = try container.decodeIfPresent(FlexibleNumber.self, forKey: .byteUsed) {
+            byteUsed = explicitUsed
+        } else if let total = byteTotal?.doubleValue, let remaining = byteRemaining?.doubleValue {
+            byteUsed = .double(max(0, total - remaining))
+        } else {
+            byteUsed = nil
+        }
+
+        day = try container.decodeIfPresent(Int.self, forKey: .day)
+        expireTime = try container.decodeIfPresent(String.self, forKey: .expireTime)
+        createTime = try container.decodeIfPresent(String.self, forKey: .createTime)
+        reason = try container.decodeIfPresent(String.self, forKey: .reason)
+        type = try container.decodeIfPresent(String.self, forKey: .type)
     }
 }
 
@@ -737,36 +689,25 @@ enum SummaryStatusTone: Equatable {
 }
 
 struct StatusSummaryViewModel {
-    let title: String
     let currentSource: PackageSource
     let currentSourceTitle: String
     let statisticsDisplayMode: StatisticsDisplayMode
-    let statisticsModeText: String
-    let statusText: String
-    let statusTone: SummaryStatusTone
     let emailText: String
     let canToggleEmail: Bool
     let isEmailVisible: Bool
-    let usageLabel: String
     let usageValue: String
-    let remainingValue: String
-    let renewalLabel: String
     let renewalValue: String
-    let packageSectionTitle: String?
     let packageItems: [SummaryPackageItem]
     let progressLabel: String
     let progressPrefix: String?
     let progressValue: String
     let progress: Double?
     let footerText: String
-    let hasAPIKey: Bool
-    let hasAGIKey: Bool
     let codexAPIKeyStatusText: String
     let agiAPIKeyStatusText: String
     let codexAPIKeyMaskedText: String
     let agiAPIKeyMaskedText: String
     let pollIntervalSeconds: Double
-    let pollIntervalText: String
     let launchAtLoginEnabled: Bool
     let launchAtLoginSupported: Bool
     let launchAtLoginUnavailableReason: String?
@@ -775,14 +716,9 @@ struct StatusSummaryViewModel {
     let statusBarManualColorHex: String
     let statusBarColorText: String
     let panelMode: MenuPanelMode
-    let mcpStatusText: String
     let mcpEnabled: Bool
     let mcpPort: UInt16
-    let canOpenDashboard: Bool
-    let canOpenPricing: Bool
-    let dashboardActionTitle: String
     let sourceGroups: [SourceSummaryGroupViewModel]
-    let mountedModules: [MountedPackageModuleSummary]
     let codexDashboard: CodexDashboardMetrics
     let codexUsageRecords: CodexUsageRecordsPanelViewModel
 }
@@ -935,18 +871,6 @@ struct SourceSummaryGroupViewModel {
     let isExpanded: Bool
 }
 
-struct NormalizedMonitorPayload {
-    let usage: String
-    let remaining: String
-    let renewal: String?
-    let packageItems: [SummaryPackageItem]
-    let usedPercent: Double?
-    let usageLabel: String
-    let progressLabel: String
-    let progressPrefix: String?
-    let email: String?
-}
-
 struct SourceMonitorState {
     let source: PackageSource
     var usage: String
@@ -971,7 +895,7 @@ struct SourceMonitorState {
             remaining: "--",
             renewal: "--",
             message: hasAPIKey ? "等待数据" : "请先设置\(source.settingsTitle) API Key",
-            usageLabel: source == .agi ? "已用/总字节" : "已用/总",
+            usageLabel: source == .agi ? "已用字节/总字节" : "已用/总",
             progressLabel: source == .agi ? "AGI 用量进度" : "用量进度",
             progressPrefix: nil,
             email: nil,
@@ -983,24 +907,6 @@ struct SourceMonitorState {
             weeklyUsagePayload: nil
         )
     }
-}
-
-struct MountedPackageModuleSummary {
-    let title: String
-    let statusText: String
-    let statusTone: SummaryStatusTone
-    let usageLabel: String
-    let usageValue: String
-    let remainingLabel: String
-    let remainingValue: String
-    let renewalLabel: String
-    let renewalValue: String
-    let progressLabel: String
-    let progressValue: String
-    let progress: Double?
-    let footerText: String
-    let packageSectionTitle: String?
-    let packageItems: [SummaryPackageItem]
 }
 
 struct SummaryPackageItem {
@@ -1018,36 +924,25 @@ extension SummaryStatusTone {
 
 extension StatusSummaryViewModel {
     static let placeholder = StatusSummaryViewModel(
-        title: AppMeta.displayName,
         currentSource: .codex,
         currentSourceTitle: PackageSource.codex.chipTitle,
         statisticsDisplayMode: .single,
-        statisticsModeText: StatisticsDisplayMode.single.fullTitle,
-        statusText: "等待中",
-        statusTone: .neutral,
         emailText: "--",
         canToggleEmail: false,
         isEmailVisible: false,
-        usageLabel: "已用/总",
         usageValue: "--",
-        remainingValue: "--",
-        renewalLabel: "最近到期",
         renewalValue: "--",
-        packageSectionTitle: nil,
         packageItems: [],
         progressLabel: "本周用量进度",
         progressPrefix: nil,
         progressValue: "--",
         progress: nil,
         footerText: "等待数据",
-        hasAPIKey: false,
-        hasAGIKey: false,
         codexAPIKeyStatusText: "未配置",
         agiAPIKeyStatusText: "未配置",
         codexAPIKeyMaskedText: "",
         agiAPIKeyMaskedText: "",
         pollIntervalSeconds: 5,
-        pollIntervalText: "--",
         launchAtLoginEnabled: true,
         launchAtLoginSupported: true,
         launchAtLoginUnavailableReason: nil,
@@ -1056,14 +951,9 @@ extension StatusSummaryViewModel {
         statusBarManualColorHex: AppMeta.defaultStatusBarColorHex,
         statusBarColorText: "自动适配（手动 #FFFFFF）",
         panelMode: .statistics,
-        mcpStatusText: "MCP 未启动",
         mcpEnabled: false,
         mcpPort: AppMeta.defaultMCPPort,
-        canOpenDashboard: true,
-        canOpenPricing: true,
-        dashboardActionTitle: PackageSource.codex.openDashboardTitle,
         sourceGroups: [],
-        mountedModules: [],
         codexDashboard: .empty,
         codexUsageRecords: .empty
     )
