@@ -512,7 +512,7 @@ final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
         let fallbackID = "log-\(page)-\(fallbackIndex)"
         let id = item.id ?? item.requestID ?? fallbackID
         let timestampText = Self.logTimeText(item.timestamp)
-        let tier = item.tier ?? "standard"
+        let tier = Self.normalizedTierText(item.tier) ?? "standard"
         let model = item.model ?? "未知模型"
 
         let totalTokensText = Self.integerText(item.totalTokens) ?? "--"
@@ -547,6 +547,12 @@ final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
             totalTokensValue: item.totalTokens,
             totalCostValue: item.totalCost
         )
+    }
+
+    private static func normalizedTierText(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 
     private static let successBusinessCodes: Set<Int> = [0, 200]
@@ -777,7 +783,7 @@ final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
             }
 
             return SummaryPackageItem(
-                title: normalizePackageTitle(item.packageType),
+                title: normalizeCodexPackageTitle(item),
                 subtitle: "生效 \(startText)  到期 \(expireText)",
                 badgeText: daysRemaining == 0 ? "今天到期" : "剩\(daysRemaining)天",
                 badgeTone: badgeTone
@@ -824,6 +830,31 @@ final class CodexMonitorNetworkService: CodexMonitorNetworkServing {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         return formatter.date(from: rawValue)
+    }
+
+    private static func normalizeCodexPackageTitle(_ item: PackageItem) -> String {
+        let subType = normalizePackageTitlePart(item.subType)
+        let packageType = normalizePackageTitlePart(item.packageType)
+
+        switch (subType, packageType) {
+        case let (subType?, packageType?) where subType.caseInsensitiveCompare(packageType) != .orderedSame:
+            return "\(subType) \(packageType)"
+        case let (subType?, _):
+            return subType
+        case let (_, packageType?):
+            return packageType
+        default:
+            return "未知套餐"
+        }
+    }
+
+    private static func normalizePackageTitlePart(_ rawValue: String?) -> String? {
+        guard let rawValue else { return nil }
+        let normalized = rawValue
+            .replacingOccurrences(of: "_", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !normalized.isEmpty else { return nil }
+        return normalized.capitalized(with: Locale(identifier: "en_US_POSIX"))
     }
 
     private static func normalizePackageTitle(_ rawValue: String?) -> String {
@@ -1027,8 +1058,7 @@ private struct CodexUsageLogPayload: Decodable {
         case model
         case modelName = "model_name"
         case modelNameCamel = "modelName"
-        case serviceTier = "service_tier"
-        case serviceTierCamel = "serviceTier"
+        case reasoning
         case tier
         case totalTokens = "total_tokens"
         case totalTokensCamel = "totalTokens"
@@ -1068,9 +1098,10 @@ private struct CodexUsageLogPayload: Decodable {
         model = try container.decodeIfPresent(String.self, forKey: .model)
             ?? container.decodeIfPresent(String.self, forKey: .modelName)
             ?? container.decodeIfPresent(String.self, forKey: .modelNameCamel)
-        tier = try container.decodeIfPresent(String.self, forKey: .tier)
-            ?? container.decodeIfPresent(String.self, forKey: .serviceTier)
-            ?? container.decodeIfPresent(String.self, forKey: .serviceTierCamel)
+        let reasoning = try container.decodeIfPresent(String.self, forKey: .reasoning)
+        let tierValue = try container.decodeIfPresent(String.self, forKey: .tier)
+        tier = Self.normalizedTierText(reasoning)
+            ?? Self.normalizedTierText(tierValue)
 
         totalTokens = Self.decodeFlexibleDouble(container: container, snake: .totalTokens, camel: .totalTokensCamel)
         inputTokens = Self.decodeFlexibleDouble(container: container, snake: .inputTokens, camel: .inputTokensCamel)
@@ -1113,5 +1144,11 @@ private struct CodexUsageLogPayload: Decodable {
             return direct
         }
         return nil
+    }
+
+    private static func normalizedTierText(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
     }
 }

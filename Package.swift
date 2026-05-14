@@ -14,9 +14,15 @@ let package = Package(
             targets: ["yls-app"]
         ),
     ],
+    dependencies: [
+        .package(url: "https://gh-proxy.com/github.com/gonzalezreal/swift-markdown-ui.git", from: "2.4.1"),
+    ],
     targets: [
         .executableTarget(
             name: "yls-app",
+            dependencies: [
+                .product(name: "MarkdownUI", package: "swift-markdown-ui"),
+            ],
             path: "Sources",
             resources: [
                 .process("yls-app/Resources"),

@@ -9,12 +9,14 @@ APP_VERSION="${APP_VERSION:-0.1.0}"
 APP_BUILD="${APP_BUILD:-1}"
 ICON_SOURCE_REL="${ICON_SOURCE_REL:-images/yls_logo_1024.png}"
 DMG_BACKGROUND_REL="${DMG_BACKGROUND_REL:-images/yls_background.png}"
+DMG_VOLUME_NAME="${DMG_VOLUME_NAME:-${APP_BUNDLE_NAME}}"
 BUILD_ARCHS="${BUILD_ARCHS:-arm64 x86_64}"
 DMG_ICON_SIZE="${DMG_ICON_SIZE:-96}"
 DMG_TEXT_SIZE="${DMG_TEXT_SIZE:-14}"
 DMG_APP_ICON_POSITION="${DMG_APP_ICON_POSITION:-113,160}"
 DMG_APPLICATIONS_ICON_POSITION="${DMG_APPLICATIONS_ICON_POSITION:-330,160}"
 DMG_BACKGROUND_ICON_POSITION="${DMG_BACKGROUND_ICON_POSITION:-600,160}"
+DMG_VOLUME_ICON_POSITION="${DMG_VOLUME_ICON_POSITION:-600,160}"
 DMG_WINDOW_CHROME_HEIGHT="${DMG_WINDOW_CHROME_HEIGHT:-56}"
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
@@ -29,14 +31,24 @@ DMG_BACKGROUND="$ROOT_DIR/$DMG_BACKGROUND_REL"
 APP_LOGO_SOURCE="$ROOT_DIR/Sources/yls-app/Resources/yls_logo.png"
 ICONSET_DIR="$DIST_DIR/AppIcon.iconset"
 ICNS_PATH="$APP_RESOURCES/AppIcon.icns"
+DMG_VOLUME_ICON_PATH="$DIST_DIR/VolumeIcon.icns"
 DMG_PATH="$DIST_DIR/${APP_BUNDLE_NAME}.dmg"
 DMG_STAGE_DIR="$DIST_DIR/.dmg-stage"
 DMG_TMP_RW="$DIST_DIR/${APP_BUNDLE_NAME}-rw.dmg"
 DMG_MOUNT_DIR="$DIST_DIR/.dmg-mount"
 DMG_BACKGROUND_DIR="$DMG_STAGE_DIR/.background"
 DMG_BACKGROUND_STAGE_PATH="$DMG_BACKGROUND_DIR/background.png"
+SPM_CACHE_ROOT="${SPM_CACHE_ROOT:-$ROOT_DIR/.build/.spm-home}"
+SPM_CACHE_PATH="${SPM_CACHE_PATH:-$SPM_CACHE_ROOT/cache}"
+SPM_CONFIG_PATH="${SPM_CONFIG_PATH:-$SPM_CACHE_ROOT/configuration}"
+SPM_SECURITY_PATH="${SPM_SECURITY_PATH:-$SPM_CACHE_ROOT/security}"
+SPM_MODULE_CACHE_PATH="${SPM_MODULE_CACHE_PATH:-$SPM_CACHE_ROOT/ModuleCache}"
 
 cd "$ROOT_DIR"
+mkdir -p "$SPM_CACHE_PATH" "$SPM_CONFIG_PATH" "$SPM_SECURITY_PATH" "$SPM_MODULE_CACHE_PATH"
+
+# In sandboxed environments, SwiftPM defaults under $HOME may be read-only.
+export SWIFTPM_MODULECACHE_OVERRIDE="$SPM_MODULE_CACHE_PATH"
 
 read -r -a BUILD_ARCH_ARRAY <<< "$BUILD_ARCHS"
 if [[ "${#BUILD_ARCH_ARRAY[@]}" -eq 0 ]]; then
@@ -50,7 +62,13 @@ for arch in "${BUILD_ARCH_ARRAY[@]}"; do
 done
 
 echo "Building release binary for architectures: ${BUILD_ARCH_ARRAY[*]}"
-swift build "${SWIFT_BUILD_ARGS[@]}"
+swift build \
+  --disable-sandbox \
+  --manifest-cache local \
+  --cache-path "$SPM_CACHE_PATH" \
+  --config-path "$SPM_CONFIG_PATH" \
+  --security-path "$SPM_SECURITY_PATH" \
+  "${SWIFT_BUILD_ARGS[@]}"
 
 BINARY_PATH=""
 if [[ "${#BUILD_ARCH_ARRAY[@]}" -gt 1 ]]; then
@@ -106,6 +124,7 @@ DMG_WINDOW_OUTER_HEIGHT=$((DMG_WINDOW_HEIGHT + DMG_WINDOW_CHROME_HEIGHT))
 
 rm -rf "$APP_DIR" "$DMG_PATH" "$ICONSET_DIR" "$DMG_STAGE_DIR" "$DMG_MOUNT_DIR"
 rm -f "$DMG_TMP_RW"
+rm -f "$DMG_VOLUME_ICON_PATH"
 rm -f "$DIST_DIR/${APP_BUNDLE_NAME}.zip"
 mkdir -p "$APP_MACOS" "$APP_RESOURCES"
 
@@ -123,7 +142,13 @@ sips -s format png -z 256 256 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_256x256.pn
 sips -s format png -z 512 512 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_256x256@2x.png" >/dev/null
 sips -s format png -z 512 512 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512.png" >/dev/null
 sips -s format png -z 1024 1024 "$ICON_SOURCE" --out "$ICONSET_DIR/icon_512x512@2x.png" >/dev/null
-iconutil -c icns "$ICONSET_DIR" -o "$ICNS_PATH"
+ICON_PLIST_ENTRY=""
+if iconutil -c icns "$ICONSET_DIR" -o "$ICNS_PATH"; then
+  cp "$ICNS_PATH" "$DMG_VOLUME_ICON_PATH"
+  ICON_PLIST_ENTRY=$'    <key>CFBundleIconFile</key>\n    <string>AppIcon</string>'
+else
+  echo "Warning: iconutil failed, packaging without custom app icon." >&2
+fi
 rm -rf "$ICONSET_DIR"
 
 cp "$APP_LOGO_SOURCE" "$APP_RESOURCES/yls_logo.png"
@@ -145,14 +170,15 @@ cat > "$PLIST_PATH" <<PLIST
     <string>${APP_VERSION}</string>
     <key>CFBundleExecutable</key>
     <string>${EXECUTABLE_NAME}</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
+${ICON_PLIST_ENTRY}
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>LSMinimumSystemVersion</key>
     <string>13.0</string>
     <key>LSUIElement</key>
     <false/>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>用于在定时提醒确认后请求系统执行关机。</string>
 </dict>
 </plist>
 PLIST
@@ -165,7 +191,12 @@ mkdir -p "$DIST_DIR" "$DMG_STAGE_DIR" "$DMG_BACKGROUND_DIR"
 cp -R "$APP_DIR" "$DMG_STAGE_DIR/"
 ln -s /Applications "$DMG_STAGE_DIR/Applications"
 cp "$DMG_BACKGROUND" "$DMG_BACKGROUND_STAGE_PATH"
+if [[ -f "$DMG_VOLUME_ICON_PATH" ]]; then
+  cp "$DMG_VOLUME_ICON_PATH" "$DMG_STAGE_DIR/.VolumeIcon.icns"
+  SetFile -a C "$DMG_STAGE_DIR" || true
+fi
 chflags hidden "$DMG_STAGE_DIR/.background" || true
+chflags hidden "$DMG_STAGE_DIR/.VolumeIcon.icns" || true
 
 DMG_STAGE_SIZE_MB="$(du -sm "$DMG_STAGE_DIR" | awk '{print $1}')"
 if [[ -z "$DMG_STAGE_SIZE_MB" ]]; then
@@ -174,7 +205,7 @@ fi
 DMG_TOTAL_SIZE_MB=$((DMG_STAGE_SIZE_MB + 80))
 
 hdiutil create \
-  -volname "$APP_BUNDLE_NAME" \
+  -volname "$DMG_VOLUME_NAME" \
   -srcfolder "$DMG_STAGE_DIR" \
   -ov \
   -format UDRW \
@@ -194,6 +225,10 @@ fi
 
 if [[ -d "$DMG_MOUNT_DIR/.background" ]]; then
   chflags hidden "$DMG_MOUNT_DIR/.background" || true
+fi
+if [[ -f "$DMG_MOUNT_DIR/.VolumeIcon.icns" ]]; then
+  SetFile -a C "$DMG_MOUNT_DIR" || true
+  chflags hidden "$DMG_MOUNT_DIR/.VolumeIcon.icns" || true
 fi
 
 if command -v osascript >/dev/null 2>&1; then
@@ -219,6 +254,9 @@ tell application "Finder"
   try
     set position of item ".background" of w to {${DMG_BACKGROUND_ICON_POSITION}}
   end try
+  try
+    set position of item ".VolumeIcon.icns" of w to {${DMG_VOLUME_ICON_POSITION}}
+  end try
   set position of item "${APP_BUNDLE_NAME}.app" of w to {${DMG_APP_ICON_POSITION}}
   set position of item "Applications" of w to {${DMG_APPLICATIONS_ICON_POSITION}}
   set bounds of w to {120, 120, 120 + ${DMG_WINDOW_WIDTH}, 120 + ${DMG_WINDOW_OUTER_HEIGHT}}
@@ -234,6 +272,10 @@ fi
 if [[ -d "$DMG_MOUNT_DIR/.background" ]]; then
   chflags hidden "$DMG_MOUNT_DIR/.background" || true
 fi
+if [[ -f "$DMG_MOUNT_DIR/.VolumeIcon.icns" ]]; then
+  SetFile -a C "$DMG_MOUNT_DIR" || true
+  chflags hidden "$DMG_MOUNT_DIR/.VolumeIcon.icns" || true
+fi
 if [[ -d "$DMG_MOUNT_DIR/.fseventsd" ]]; then
   rm -rf "$DMG_MOUNT_DIR/.fseventsd" || true
 fi
@@ -245,7 +287,7 @@ sync
 hdiutil detach "$DMG_DEVICE" >/dev/null
 
 hdiutil convert "$DMG_TMP_RW" -ov -format UDZO -o "$DMG_PATH" >/dev/null
-rm -f "$DMG_TMP_RW"
+rm -f "$DMG_TMP_RW" "$DMG_VOLUME_ICON_PATH"
 rm -rf "$APP_DIR" "$DMG_STAGE_DIR" "$DMG_MOUNT_DIR"
 
 echo "DMG package: $DMG_PATH"

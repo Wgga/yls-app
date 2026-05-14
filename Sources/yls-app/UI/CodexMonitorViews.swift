@@ -1,4 +1,6 @@
 import AppKit
+import MarkdownUI
+import UniformTypeIdentifiers
 import SwiftUI
 
 private extension Color {
@@ -383,7 +385,7 @@ struct SourceSummaryGroupView: View {
             }
             .buttonStyle(.plain)
 
-            if !displayFooterText.isEmpty {
+            if shouldShowFooterText {
                 Text(displayFooterText)
                     .font(.system(size: 10.5, weight: .medium))
                     .foregroundStyle(.secondary)
@@ -542,8 +544,8 @@ struct SourceSummaryGroupView: View {
 
         return [
             SummaryPackageItem(
-                title: model.source == .codex ? "Basic" : "AGI 套餐",
-                subtitle: "到期 \(model.renewalValue)",
+                title: model.source == .codex ? "未获取套餐数据" : "AGI 套餐",
+                subtitle: model.source == .codex ? model.footerText : "到期 \(model.renewalValue)",
                 badgeText: "",
                 badgeTone: .neutral
             ),
@@ -553,7 +555,7 @@ struct SourceSummaryGroupView: View {
     private func packageTitleText(for item: SummaryPackageItem) -> String {
         switch model.source {
         case .codex:
-            return "codex \(item.title) 订阅"
+            return "\(item.title) 订阅"
         case .agi:
             return item.title
         }
@@ -793,6 +795,10 @@ struct SourceSummaryGroupView: View {
         return "请先设置 Codex API Key"
     }
 
+    private var shouldShowFooterText: Bool {
+        model.source != .codex && !displayFooterText.isEmpty
+    }
+
     private var formattedAGIUsageValue: String {
         let parts = model.usageValue.split(separator: "/", maxSplits: 1).map {
             $0.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1007,6 +1013,8 @@ struct SourceSummaryGroupView: View {
 private enum DashboardTab: String, CaseIterable {
     case usageOverview
     case usageRecords
+    case codexSwitch
+    case scheduledTasks
 
     var title: String {
         switch self {
@@ -1014,6 +1022,10 @@ private enum DashboardTab: String, CaseIterable {
             return "使用情况"
         case .usageRecords:
             return "使用记录"
+        case .codexSwitch:
+            return "Codex Switch"
+        case .scheduledTasks:
+            return "定时任务"
         }
     }
 
@@ -1023,6 +1035,68 @@ private enum DashboardTab: String, CaseIterable {
             return "chart.bar"
         case .usageRecords:
             return "clock.arrow.circlepath"
+        case .codexSwitch:
+            return "arrow.left.arrow.right"
+        case .scheduledTasks:
+            return "alarm"
+        }
+    }
+}
+
+private enum ScheduledTaskRepeatKind: String, CaseIterable {
+    case daily
+    case weekly
+    case monthly
+
+    var title: String {
+        switch self {
+        case .daily:
+            return "每天"
+        case .weekly:
+            return "每周"
+        case .monthly:
+            return "每月"
+        }
+    }
+}
+
+private enum ScheduledTaskReminderType: String {
+    case popup
+
+    var title: String {
+        switch self {
+        case .popup:
+            return "弹窗提醒"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .popup:
+            return "macwindow.on.rectangle"
+        }
+    }
+}
+
+private enum ScheduledTaskAction: String, CaseIterable {
+    case none
+    case shutdown
+
+    var title: String {
+        switch self {
+        case .none:
+            return "仅提醒"
+        case .shutdown:
+            return "确认后关机"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .none:
+            return "bell"
+        case .shutdown:
+            return "power"
         }
     }
 }
@@ -1059,7 +1133,45 @@ struct MonitorDashboardShellView: View {
     @State private var statusBarAutoAdaptDraft = true
     @State private var statusBarManualColorDraft = Color.white
     @State private var isSkinSettingsPageVisible = false
-    @State private var selectedSkinSourceRawValue = SkinSourceOption.official.rawValue
+    @AppStorage(DefaultsKey.scheduledTaskConfigured) private var scheduledTaskConfigured = false
+    @State private var scheduledTasks: [ScheduledTaskItem] = ScheduledTaskItem.loadAll()
+    @State private var isScheduledTaskMenuPresented = false
+    @State private var presentedScheduledTaskMenuID: String?
+    @State private var isScheduledTaskEditorVisible = false
+    @State private var isEditingScheduledTask = false
+    @State private var editingScheduledTaskID: String?
+    @State private var scheduledTaskDraftHourText = "08"
+    @State private var scheduledTaskDraftMinuteText = "00"
+    @State private var scheduledTaskDraftRepeatKindRawValue = ScheduledTaskRepeatKind.daily.rawValue
+    @State private var scheduledTaskDraftRepeatDayText = "1"
+    @State private var scheduledTaskDraftTitle = ""
+    @State private var scheduledTaskDraftDescription = ""
+    @State private var scheduledTaskDraftActionRawValue = ScheduledTaskAction.none.rawValue
+    @State private var scheduledTaskDraftCancelButtonTitle = "再卷一会儿"
+    @State private var scheduledTaskDraftConfirmButtonTitle = "准点下班"
+    @State private var scheduledTaskDraftIconImageDataBase64: String?
+    @State private var codexSwitchProviders: [CodexSwitchProviderItem] = CodexSwitchProviderItem.loadAll()
+    @State private var isCodexSwitchAddProviderVisible = false
+    @State private var codexSwitchDraftScopeRawValue = CodexSwitchProviderItem.Scope.appSpecific.rawValue
+    @State private var codexSwitchDraftPreset = "OpenAI"
+    @State private var codexSwitchDraftName = ""
+    @State private var codexSwitchDraftEndpoint = ""
+    @State private var codexSwitchDraftAPIKey = ""
+    @State private var codexSwitchDraftWebsite = ""
+    @State private var codexSwitchDraftNotes = ""
+    @State private var codexSwitchDraftUseFullURL = false
+    @State private var codexSwitchDraftModelName = "gpt-5.4"
+    @State private var codexSwitchDraftWriteGlobalConfig = true
+    @State private var codexSwitchDraftCompressionThresholdText = "900000"
+    @State private var codexSwitchDraftOneMillionContext = false
+    @State private var codexSwitchDraftUseStandaloneTestConfig = false
+    @State private var codexSwitchDraftTestPanelExpanded = true
+    @State private var codexSwitchDraftTestModel = ""
+    @State private var codexSwitchDraftTestTimeoutText = "45"
+    @State private var codexSwitchDraftTestDegradeThresholdText = "6000"
+    @State private var codexSwitchDraftTestPrompt = "Who are you?"
+    @State private var codexSwitchDraftTestMaxRetriesText = "2"
+    @AppStorage("skin_source_option") private var selectedSkinSourceRawValue = SkinSourceOption.official.rawValue
     @AppStorage("skin_theme_option") private var selectedSkinThemeRawValue = SkinThemeOption.defaultFollowSystem.rawValue
     @AppStorage("skin_custom_hue") private var customSkinHue = 0.0
     @AppStorage("skin_custom_brightness") private var customSkinBrightness = 1.0
@@ -1164,6 +1276,17 @@ struct MonitorDashboardShellView: View {
         isCustomSkinSelected ? themeAccentColor : Color(nsColor: .systemGreen)
     }
 
+    private var selectedControlAccentColor: Color {
+        settingsAccentColor
+    }
+
+    private var visibleSelectedControlAccentColor: Color {
+        if isCustomSkinSelected {
+            return visibleThemeAccentColor
+        }
+        return selectedControlAccentColor
+    }
+
     private var successBadgeColor: Color {
         isCustomSkinSelected ? customSkinColor : Color(nsColor: .systemGreen)
     }
@@ -1179,14 +1302,14 @@ struct MonitorDashboardShellView: View {
         if isCustomSkinSelected, customSkinBrightness < 0.28 {
             return Color.white.opacity(0.10)
         }
-        return themeAccentColor.opacity(0.16)
+        return selectedControlAccentColor.opacity(0.16)
     }
 
     private var selectedSkinSourceStrokeColor: Color {
         if isCustomSkinSelected, customSkinBrightness < 0.28 {
             return Color.white.opacity(0.24)
         }
-        return themeAccentColor.opacity(0.32)
+        return selectedControlAccentColor.opacity(0.32)
     }
 
     private var unselectedSkinSourceForegroundColor: Color {
@@ -1274,14 +1397,18 @@ struct MonitorDashboardShellView: View {
         if isCustomSkinSelected {
             return customSkinColor.opacity(0.16)
         }
-        return isDarkTheme ? Color.white.opacity(0.10) : Color.white
+        return successBadgeColor.opacity(isDarkTheme ? 0.18 : 0.12)
     }
 
     private var selectedTabStrokeColor: Color {
         if isCustomSkinSelected {
             return customSkinColor.opacity(0.34)
         }
-        return isDarkTheme ? Color.white.opacity(0.18) : Color.black.opacity(0.10)
+        return successBadgeColor.opacity(isDarkTheme ? 0.30 : 0.22)
+    }
+
+    private var selectedTabForegroundColor: Color {
+        isCustomSkinSelected ? .primary : successBadgeColor
     }
 
     private var brandLogo: Image {
@@ -1311,65 +1438,66 @@ struct MonitorDashboardShellView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            topBar
-
-            HStack(spacing: 0) {
-                sidebar
-                mainContent
-            }
+        HStack(spacing: 0) {
+            sidebar
+            mainContent
         }
         .background(windowBackgroundColor)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .environment(\.colorScheme, effectiveColorScheme)
-        .tint(themeAccentColor)
+        .tint(settingsAccentColor)
         .animation(themeTransitionAnimation, value: selectedSkinThemeRawValue)
         .animation(themeTransitionAnimation, value: selectedSkinSourceRawValue)
         .animation(themeTransitionAnimation, value: customSkinHue)
         .animation(themeTransitionAnimation, value: customSkinBrightness)
     }
 
-    private var topBar: some View {
-        HStack(spacing: 0) {
-            HStack(spacing: 10) {
-                brandLogo
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 28, height: 28)
-                    .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+    private var sidebarBrandHeader: some View {
+        HStack(spacing: 10) {
+            brandLogo
+                .resizable()
+                .scaledToFit()
+                .frame(width: 28, height: 28)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
-                Text("伊莉思监控助手")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-            }
-            .padding(.horizontal, 14)
-            .frame(width: sidebarWidth, alignment: .leading)
-            .frame(maxHeight: .infinity, alignment: .center)
-            .background(sidebarBackgroundColor)
-
-            HStack(spacing: 8) {
-                Text(model.footerText)
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-
-                Spacer(minLength: 10)
-                topBarAccountCapsule
-
-                topBarIconButton(systemImage: "arrow.clockwise", action: onRefresh)
-                topBarIconButton(systemImage: "gearshape", action: handleSettingsButton)
-                topBarIconButton(
-                    systemImage: "tshirt",
-                    action: toggleSkinSettingsPage
-                )
-                topBarIconButton(systemImage: "uiwindow.split.2x1", action: nil)
-            }
-            .padding(.horizontal, 16)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-            .background(contentBackgroundColor)
+            Text("伊莉思监控助手")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
         }
-        .frame(height: 38)
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, minHeight: 38, alignment: .leading)
+        .background(sidebarBackgroundColor)
+    }
+
+    private var mainContentHeader: some View {
+        HStack(spacing: 8) {
+            Text(topBarStatusText)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Spacer(minLength: 10)
+            topBarAccountCapsule
+
+            topBarIconButton(systemImage: "arrow.clockwise", action: onRefresh)
+            topBarIconButton(systemImage: "gearshape", action: handleSettingsButton)
+            topBarIconButton(
+                systemImage: "tshirt",
+                action: toggleSkinSettingsPage
+            )
+            topBarIconButton(systemImage: "uiwindow.split.2x1", action: nil)
+        }
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, minHeight: 38, alignment: .center)
+        .background(contentBackgroundColor)
+    }
+
+    private var topBarStatusText: String {
+        if model.currentSource == .codex, model.footerText == "请先设置 API Key" {
+            return "请先设置 Codex API Key"
+        }
+        return model.footerText
     }
 
     private func topBarIconButton(
@@ -1436,16 +1564,20 @@ struct MonitorDashboardShellView: View {
     }
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ForEach(DashboardTab.allCases, id: \.rawValue) { tab in
-                tabButton(tab)
-            }
+        VStack(alignment: .leading, spacing: 0) {
+            sidebarBrandHeader
 
-            Spacer(minLength: 0)
+            VStack(alignment: .leading, spacing: 8) {
+                ForEach(DashboardTab.allCases, id: \.rawValue) { tab in
+                    tabButton(tab)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 16)
+            .padding(.bottom, 18)
         }
-        .padding(.horizontal, 14)
-        .padding(.top, 16)
-        .padding(.bottom, 18)
         .frame(width: sidebarWidth, alignment: .topLeading)
         .background(sidebarBackgroundColor)
     }
@@ -1464,7 +1596,7 @@ struct MonitorDashboardShellView: View {
 
                 Spacer(minLength: 6)
             }
-            .foregroundStyle(isSelected ? .primary : .secondary)
+            .foregroundStyle(isSelected ? selectedTabForegroundColor : .secondary)
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1498,25 +1630,44 @@ struct MonitorDashboardShellView: View {
     }
 
     private var mainContent: some View {
-        ScrollView(.vertical, showsIndicators: true) {
-            VStack(alignment: .leading, spacing: 12) {
-                if isSkinSettingsPageVisible {
-                    skinSettingsPage
-                } else if model.panelMode == .settings {
-                    settingsPage
-                } else {
-                    if selectedTab == .usageOverview {
-                        usageOverviewContent
-                    } else {
-                        usageRecordsContent
+        VStack(spacing: 0) {
+            mainContentHeader
+
+            if !isSkinSettingsPageVisible,
+               model.panelMode != .settings,
+               selectedTab == .codexSwitch,
+               isCodexSwitchAddProviderVisible
+            {
+                codexSwitchAddProviderContent
+                    .padding(.leading, 16)
+                    .padding(.trailing, 28)
+                    .padding(.top, 12)
+                    .padding(.bottom, 14)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            } else {
+                ScrollView(.vertical, showsIndicators: true) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        if isSkinSettingsPageVisible {
+                            skinSettingsPage
+                        } else if model.panelMode == .settings {
+                            settingsPage
+                        } else if selectedTab == .usageRecords {
+                            usageRecordsContent
+                        } else if selectedTab == .codexSwitch {
+                            codexSwitchContent
+                        } else if selectedTab == .scheduledTasks {
+                            scheduledTasksContent
+                        } else {
+                            usageOverviewContent
+                        }
                     }
+                    .padding(.leading, 16)
+                    .padding(.trailing, 28)
+                    .padding(.top, 12)
+                    .padding(.bottom, 14)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
             }
-            .padding(.leading, 16)
-            .padding(.trailing, 28)
-            .padding(.top, 12)
-            .padding(.bottom, 14)
-            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(contentBackgroundColor)
@@ -1530,7 +1681,7 @@ struct MonitorDashboardShellView: View {
                     .foregroundStyle(.primary)
 
                 Capsule()
-                    .fill(themeAccentColor)
+                    .fill(selectedControlAccentColor)
                     .frame(width: 34, height: 4)
             }
             .padding(.top, 4)
@@ -1562,7 +1713,7 @@ struct MonitorDashboardShellView: View {
         return Button(action: { selectedSkinSourceRawValue = source.rawValue }) {
             Text(source.title)
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(isSelected ? visibleThemeAccentColor : unselectedSkinSourceForegroundColor)
+                .foregroundStyle(isSelected ? visibleSelectedControlAccentColor : unselectedSkinSourceForegroundColor)
                 .padding(.horizontal, 28)
                 .padding(.vertical, 12)
                 .background(
@@ -1602,7 +1753,7 @@ struct MonitorDashboardShellView: View {
                             RoundedRectangle(cornerRadius: 18, style: .continuous)
                                 .stroke(
                                     isSelected
-                                        ? themeAccentColor.opacity(0.5)
+                                        ? selectedControlAccentColor.opacity(0.5)
                                         : separatorColor,
                                     lineWidth: isSelected ? 1.2 : 1
                                 )
@@ -1610,7 +1761,7 @@ struct MonitorDashboardShellView: View {
 
                     if isSelected {
                         Circle()
-                            .fill(themeAccentColor)
+                            .fill(selectedControlAccentColor)
                             .frame(width: 30, height: 30)
                             .overlay {
                                 Image(systemName: "checkmark")
@@ -1875,6 +2026,1543 @@ struct MonitorDashboardShellView: View {
                 }
             }
         }
+    }
+
+    private var codexSwitchContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            if isCodexSwitchAddProviderVisible {
+                codexSwitchAddProviderContent
+            } else {
+                codexSwitchOverviewContent
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 430, alignment: .topLeading)
+    }
+
+    private var codexSwitchOverviewContent: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Codex Switch")
+                        .font(.system(size: 24, weight: .black))
+                        .foregroundStyle(.primary)
+
+                    Capsule()
+                        .fill(selectedControlAccentColor)
+                        .frame(width: 34, height: 4)
+                }
+
+                Spacer(minLength: 8)
+
+                Button(action: { openCodexSwitchAddProviderPage() }) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(isDarkTheme ? Color.white.opacity(0.08) : Color.white))
+                        .overlay {
+                            Circle().stroke(separatorColor, lineWidth: 1)
+                        }
+                }
+                .buttonStyle(.plain)
+                .help("添加供应商")
+            }
+
+            if codexSwitchProviders.isEmpty {
+                codexSwitchEmptyState
+            } else {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(codexSwitchProviders) { provider in
+                        codexSwitchProviderCard(provider)
+                    }
+                }
+            }
+        }
+    }
+
+    private var codexSwitchAddProviderContent: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Button(action: { isCodexSwitchAddProviderVisible = false }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(isDarkTheme ? Color.white.opacity(0.08) : Color.white))
+                        .overlay {
+                            Circle().stroke(separatorColor, lineWidth: 1)
+                        }
+                }
+                .buttonStyle(.plain)
+
+                Text("添加供应商")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.primary)
+
+                Spacer(minLength: 8)
+            }
+
+            ScrollView(.vertical, showsIndicators: true) {
+                VStack(alignment: .leading, spacing: 18) {
+                    HStack(alignment: .top, spacing: 18) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("供应商名称")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.primary)
+                            codexSwitchRawInput("例如：Claude 官方", text: $codexSwitchDraftName)
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("备注")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.primary)
+                            codexSwitchRawInput("例如：公司专用账号", text: $codexSwitchDraftNotes)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("官网链接")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.primary)
+                        codexSwitchRawInput("https://example.com（可选）", text: $codexSwitchDraftWebsite)
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("API Key")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.primary)
+                        codexSwitchRawInput("只需要填这里，下方 auth.json 会自动填充", text: $codexSwitchDraftAPIKey)
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .center) {
+                            Text("API 请求地址")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.primary)
+
+                            Spacer(minLength: 10)
+
+                            HStack(spacing: 8) {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "link")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+                                    Text("完整 URL")
+                                        .font(.system(size: 10.5, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+                                    Toggle("", isOn: $codexSwitchDraftUseFullURL)
+                                        .labelsHidden()
+                                        .toggleStyle(.switch)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 6)
+                                .background(
+                                    Capsule()
+                                        .fill(isDarkTheme ? Color.white.opacity(0.04) : Color.black.opacity(0.03))
+                                )
+                                .overlay {
+                                    Capsule()
+                                        .stroke(separatorColor, lineWidth: 1)
+                                }
+
+                                HStack(spacing: 5) {
+                                    Image(systemName: "bolt")
+                                        .font(.system(size: 11, weight: .semibold))
+                                    Text("管理与测速")
+                                        .font(.system(size: 10.5, weight: .medium))
+                                }
+                                .foregroundStyle(.secondary)
+                            }
+                        }
+
+                        codexSwitchRawInput("https://your-api-endpoint.com/v1", text: $codexSwitchDraftEndpoint)
+
+                        HStack(spacing: 8) {
+                            Image(systemName: "lightbulb.fill")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text(codexSwitchEndpointHintText)
+                                .font(.system(size: 11, weight: .medium))
+                        }
+                        .foregroundStyle(Color(hex: 0xE8B04E))
+                        .padding(.horizontal, 12)
+                        .frame(height: 36)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .fill(Color(hex: 0x4A3522).opacity(isDarkTheme ? 0.72 : 0.88))
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(Color(hex: 0xB86D2B), lineWidth: 1.2)
+                        }
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack {
+                            Text("模型名称")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.primary)
+                            Spacer(minLength: 10)
+                            Button(action: {}) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: "arrow.down")
+                                    Text("获取模型列表")
+                                        .font(.system(size: 11, weight: .semibold))
+                                }
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 10)
+                                .frame(height: 22)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .fill(isDarkTheme ? Color.white.opacity(0.03) : Color.black.opacity(0.025))
+                                )
+                                .overlay {
+                                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                        .stroke(separatorColor, lineWidth: 1)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+
+                        codexSwitchRawInput("", text: $codexSwitchDraftModelName)
+                        Text("指定使用的模型，将自动更新到 config.toml 中")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .padding(.leading, 10)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("auth.json (JSON) *")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.primary)
+                        codexSwitchAuthCodeBox(codexSwitchDefaultAuthJSONContent)
+                    }
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("config.toml (TOML)")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.primary)
+                            Spacer(minLength: 10)
+                            VStack(alignment: .trailing, spacing: 4) {
+                                Toggle(isOn: $codexSwitchDraftWriteGlobalConfig) {
+                                    Text("写入通用配置")
+                                        .font(.system(size: 12, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .toggleStyle(.switch)
+
+                                Button("编辑通用配置") {}
+                                    .buttonStyle(.plain)
+                                    .font(.system(size: 10.5, weight: .medium))
+                                    .foregroundStyle(Color(hex: 0x4E9EFF))
+                            }
+                        }
+
+                        HStack(spacing: 14) {
+                            Toggle("", isOn: $codexSwitchDraftOneMillionContext)
+                                .labelsHidden()
+                                .toggleStyle(.checkbox)
+                                .frame(width: 30)
+                            Text("1M 上下文窗口")
+                                .font(.system(size: 12.5, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            Text("压缩阈值：")
+                                .font(.system(size: 12.5, weight: .medium))
+                                .foregroundStyle(.secondary)
+                            codexSwitchSmallNumberInput(text: $codexSwitchDraftCompressionThresholdText)
+                        }
+
+                        codexSwitchTomlCodeBox(codexSwitchDefaultTOMLContent)
+                    }
+
+                    VStack(alignment: .leading, spacing: 0) {
+                        VStack(spacing: 0) {
+                        HStack {
+                            HStack(spacing: 10) {
+                                Image(systemName: "flask")
+                                    .font(.system(size: 14, weight: .medium))
+                                Text("模型测试配置")
+                                    .font(.system(size: 13, weight: .bold))
+                                }
+                                .foregroundStyle(.primary)
+
+                                Spacer(minLength: 10)
+
+                                Toggle(isOn: $codexSwitchDraftUseStandaloneTestConfig) {
+                                    Text("使用单独配置")
+                                        .font(.system(size: 12, weight: .semibold))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .toggleStyle(.switch)
+
+                                Image(systemName: codexSwitchDraftTestPanelExpanded ? "chevron.down" : "chevron.right")
+                                    .font(.system(size: 11, weight: .semibold))
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 16)
+                            .frame(height: 50)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                withAnimation(.easeInOut(duration: 0.2)) {
+                                    codexSwitchDraftTestPanelExpanded.toggle()
+                                }
+                            }
+
+                            if codexSwitchDraftTestPanelExpanded {
+                                Divider().overlay(separatorColor)
+
+                                VStack(alignment: .leading, spacing: 12) {
+                                    Text("为此供应商配置单独的模型测试参数，不启用时使用全局配置。")
+                                        .font(.system(size: 10.5, weight: .medium))
+                                        .foregroundStyle(.secondary)
+                                        .padding(.bottom, 6)
+
+                                    HStack(alignment: .top, spacing: 20) {
+                                        VStack(alignment: .leading, spacing: 10) {
+                                            Text("测试模型")
+                                                .font(.system(size: 12.5, weight: .semibold))
+                                            codexSwitchRawInput("留空使用全局配置", text: $codexSwitchDraftTestModel)
+                                                .disabled(!codexSwitchDraftUseStandaloneTestConfig)
+                                        }
+
+                                        VStack(alignment: .leading, spacing: 10) {
+                                            Text("超时时间（秒）")
+                                                .font(.system(size: 12.5, weight: .semibold))
+                                            codexSwitchRawInput("", text: $codexSwitchDraftTestTimeoutText)
+                                                .disabled(!codexSwitchDraftUseStandaloneTestConfig)
+                                        }
+                                    }
+
+                                    HStack(alignment: .top, spacing: 20) {
+                                        VStack(alignment: .leading, spacing: 10) {
+                                            Text("测试提示词")
+                                                .font(.system(size: 12.5, weight: .semibold))
+                                            codexSwitchRawInput("", text: $codexSwitchDraftTestPrompt)
+                                                .disabled(!codexSwitchDraftUseStandaloneTestConfig)
+                                        }
+
+                                        VStack(alignment: .leading, spacing: 10) {
+                                            Text("降级阈值（毫秒）")
+                                                .font(.system(size: 12.5, weight: .semibold))
+                                            codexSwitchRawInput("", text: $codexSwitchDraftTestDegradeThresholdText)
+                                                .disabled(!codexSwitchDraftUseStandaloneTestConfig)
+                                        }
+                                    }
+
+                                    VStack(alignment: .leading, spacing: 10) {
+                                        Text("最大重试次数")
+                                            .font(.system(size: 12.5, weight: .semibold))
+                                        codexSwitchRawInput("", text: $codexSwitchDraftTestMaxRetriesText)
+                                            .disabled(!codexSwitchDraftUseStandaloneTestConfig)
+                                    }
+                                }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 16)
+                                .opacity(codexSwitchDraftUseStandaloneTestConfig ? 1 : 0.45)
+                            }
+                        }
+                        .background(
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .fill(isDarkTheme ? Color.white.opacity(0.02) : Color.black.opacity(0.01))
+                        )
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                                .stroke(separatorColor, lineWidth: 1)
+                        }
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+
+            HStack(spacing: 10) {
+                Spacer(minLength: 8)
+
+                Button("取消") {
+                    isCodexSwitchAddProviderVisible = false
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.primary)
+                .frame(width: 72, height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isDarkTheme ? Color.white.opacity(0.12) : Color.black.opacity(0.08))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(separatorColor, lineWidth: 0.8)
+                }
+
+                Button("保存") {
+                    saveCodexSwitchProvider()
+                }
+                .buttonStyle(.plain)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 72, height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(selectedControlAccentColor)
+                )
+                .disabled(codexSwitchDraftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                .opacity(codexSwitchDraftName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
+            }
+            .padding(.top, 4)
+            .padding(.horizontal, 12)
+        }
+    }
+
+    private func codexSwitchRawInput(_ placeholder: String, text: Binding<String>) -> some View {
+        TextField(
+            "",
+            text: text,
+            prompt: Text(placeholder)
+                .foregroundColor(.secondary.opacity(0.9))
+        )
+        .font(.system(size: 15, weight: .medium))
+        .foregroundStyle(.primary)
+        .textFieldStyle(.plain)
+        .padding(.horizontal, 16)
+        .frame(height: 50)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isDarkTheme ? Color(hex: 0x1A1B23) : Color.white)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(separatorColor, lineWidth: 1.1)
+        }
+    }
+
+    private var codexSwitchDefaultTOMLContent: String {
+        """
+model_provider = "custom"
+model = "\(codexSwitchDraftModelName)"
+model_reasoning_effort = "high"
+disable_response_storage = true
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+network_access = "enabled"
+personality = "pragmatic"
+service_tier = "fast"
+env_key = "OPENAI_API_KEY"
+"""
+    }
+
+    private var codexSwitchDefaultAuthJSONContent: String {
+        """
+{
+  "OPENAI_API_KEY": "\(codexSwitchDraftAPIKey)"
+}
+"""
+    }
+
+    private var codexSwitchEndpointHintText: String {
+        if codexSwitchDraftUseFullURL {
+            return "请填写完整请求 URL，并且必须开启路由后使用；路由将直接使用此 URL，不拼接路径"
+        }
+        return "填写兼容 OpenAI Response 格式的服务端点地址"
+    }
+
+    private func codexSwitchAuthCodeBox(_ content: String) -> some View {
+        codexSwitchRichCodePanel(
+            language: "JSON",
+            content: content,
+            languageKey: "json",
+        )
+    }
+
+    private func codexSwitchTomlCodeBox(_ content: String) -> some View {
+        codexSwitchRichCodePanel(
+            language: "TOML",
+            content: content,
+            languageKey: "toml",
+        )
+    }
+
+    private func codexSwitchRichCodePanel(
+        language: String,
+        content: String,
+        languageKey: String,
+    ) -> some View {
+        let inputBackground = isDarkTheme ? Color(hex: 0x1A1B23) : Color.white
+        let panelBackground = inputBackground
+        let codeBackground = inputBackground
+        let textColor = Color(hex: isDarkTheme ? 0xD7DEE8 : 0x1F2937)
+        let displayContent = content.trimmingCharacters(in: .newlines)
+        let lines = displayContent.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline)
+        let markdownCode = "```\(languageKey)\n\(displayContent)\n```"
+
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .center, spacing: 10) {
+                HStack(spacing: 8) {
+                    Text(language)
+                        .font(.system(size: 10.5, weight: .bold, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .frame(height: 22)
+                        .background(
+                            Capsule()
+                                .fill(isDarkTheme ? Color.white.opacity(0.08) : Color.black.opacity(0.05))
+                        )
+                        .overlay {
+                            Capsule()
+                                .stroke(separatorColor, lineWidth: 0.8)
+                        }
+
+                    Button(action: { NSPasteboard.general.setString(displayContent, forType: .string) }) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "doc.on.doc")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("复制")
+                                .font(.system(size: 11.5, weight: .semibold))
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .frame(height: 22)
+                        .background(
+                            Capsule()
+                                .fill(isDarkTheme ? Color.white.opacity(0.06) : Color.black.opacity(0.04))
+                        )
+                        .overlay {
+                            Capsule()
+                                .stroke(separatorColor, lineWidth: 0.8)
+                        }
+                    }
+                    .buttonStyle(.plain)
+
+                    Button(action: {}) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "wand.and.stars")
+                                .font(.system(size: 11, weight: .semibold))
+                            Text("格式化")
+                                .font(.system(size: 11.5, weight: .semibold))
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 10)
+                        .frame(height: 22)
+                        .background(
+                            Capsule()
+                                .fill(isDarkTheme ? Color.white.opacity(0.06) : Color.black.opacity(0.04))
+                        )
+                        .overlay {
+                            Capsule()
+                                .stroke(separatorColor, lineWidth: 0.8)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .frame(height: 46, alignment: .center)
+            .padding(.horizontal, 16)
+
+            Divider().overlay(separatorColor)
+
+            ScrollView(.horizontal, showsIndicators: true) {
+                Markdown(markdownCode)
+                    .markdownTextStyle {
+                        FontFamilyVariant(.monospaced)
+                        FontSize(16.5)
+                        ForegroundColor(textColor)
+                    }
+                    .markdownBlockStyle(\.codeBlock) { configuration in
+                        HStack(alignment: .top, spacing: 0) {
+                            VStack(alignment: .trailing, spacing: 0) {
+                                ForEach(Array(lines.enumerated()), id: \.offset) { index, _ in
+                                    Text("\(index + 1)")
+                                        .font(.system(size: 11.5, weight: .medium, design: .monospaced))
+                                        .foregroundStyle(Color.secondary.opacity(0.6))
+                                        .frame(height: 20)
+                                }
+                            }
+                            .padding(.trailing, 12)
+                            .padding(.vertical, 14)
+                            .padding(.leading, 14)
+                            .background(Color.clear)
+
+                            configuration.label
+                                .padding(.vertical, 14)
+                                .padding(.trailing, 16)
+                                .background(Color.clear)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(codeBackground)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.bottom, 4)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(panelBackground)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(separatorColor, lineWidth: 1)
+        }
+        .clipped()
+    }
+
+    private func codexSwitchSmallNumberInput(text: Binding<String>) -> some View {
+        TextField("", text: text)
+            .textFieldStyle(.plain)
+            .font(.system(size: 16, weight: .medium))
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 14)
+            .frame(width: 220, height: 46)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isDarkTheme ? Color(hex: 0x1A1B23) : Color.white)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(separatorColor, lineWidth: 1)
+            }
+    }
+
+    private var codexSwitchEmptyState: some View {
+        VStack(alignment: .center, spacing: 14) {
+            Spacer(minLength: 56)
+
+            Text("暂无供应商")
+                .font(.system(size: 22, weight: .black))
+                .foregroundStyle(.primary)
+
+            Text("点击右上角 + 添加第一个供应商")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+
+            Spacer(minLength: 96)
+        }
+        .frame(maxWidth: .infinity, minHeight: 330)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(isDarkTheme ? Color.white.opacity(0.06) : Color.white)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(separatorColor, lineWidth: 1)
+        }
+    }
+
+    private func codexSwitchProviderCard(_ provider: CodexSwitchProviderItem) -> some View {
+        let scope = CodexSwitchProviderItem.Scope(rawValue: provider.scope) ?? .appSpecific
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                Text(provider.name.isEmpty ? "未命名供应商" : provider.name)
+                    .font(.system(size: 16, weight: .black))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+
+                Text(scope.title)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(selectedControlAccentColor)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule()
+                            .fill(selectedControlAccentColor.opacity(isDarkTheme ? 0.24 : 0.12))
+                    )
+
+                Spacer(minLength: 8)
+            }
+
+            Text(provider.endpoint.isEmpty ? "未配置接口地址" : provider.endpoint)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isDarkTheme ? Color.white.opacity(0.06) : Color.white)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(separatorColor, lineWidth: 1)
+        }
+    }
+
+    private func openCodexSwitchAddProviderPage() {
+        codexSwitchDraftScopeRawValue = CodexSwitchProviderItem.Scope.appSpecific.rawValue
+        codexSwitchDraftPreset = "OpenAI"
+        codexSwitchDraftName = ""
+        codexSwitchDraftEndpoint = ""
+        codexSwitchDraftAPIKey = ""
+        codexSwitchDraftWebsite = ""
+        codexSwitchDraftNotes = ""
+        codexSwitchDraftUseFullURL = false
+        codexSwitchDraftModelName = "gpt-5.4"
+        codexSwitchDraftWriteGlobalConfig = true
+        codexSwitchDraftCompressionThresholdText = "900000"
+        codexSwitchDraftOneMillionContext = false
+        codexSwitchDraftUseStandaloneTestConfig = false
+        codexSwitchDraftTestPanelExpanded = false
+        codexSwitchDraftTestModel = ""
+        codexSwitchDraftTestTimeoutText = "45"
+        codexSwitchDraftTestDegradeThresholdText = "6000"
+        codexSwitchDraftTestPrompt = "Who are you?"
+        codexSwitchDraftTestMaxRetriesText = "2"
+        isCodexSwitchAddProviderVisible = true
+    }
+
+    private func saveCodexSwitchProvider() {
+        let rawEndpoint = codexSwitchDraftEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedEndpoint = resolveCodexSwitchEndpoint(
+            rawEndpoint: rawEndpoint,
+            useFullURL: codexSwitchDraftUseFullURL
+        )
+        let provider = CodexSwitchProviderItem(
+            id: UUID().uuidString,
+            scope: CodexSwitchProviderItem.normalizedScope(codexSwitchDraftScopeRawValue),
+            preset: codexSwitchDraftPreset.trimmingCharacters(in: .whitespacesAndNewlines),
+            name: codexSwitchDraftName.trimmingCharacters(in: .whitespacesAndNewlines),
+            endpoint: resolvedEndpoint,
+            useFullURL: codexSwitchDraftUseFullURL,
+            apiKey: codexSwitchDraftAPIKey.trimmingCharacters(in: .whitespacesAndNewlines),
+            website: codexSwitchDraftWebsite.trimmingCharacters(in: .whitespacesAndNewlines),
+            notes: codexSwitchDraftNotes.trimmingCharacters(in: .whitespacesAndNewlines)
+        )
+
+        codexSwitchProviders.append(provider)
+        CodexSwitchProviderItem.saveAll(codexSwitchProviders)
+        isCodexSwitchAddProviderVisible = false
+    }
+
+    private func resolveCodexSwitchEndpoint(rawEndpoint: String, useFullURL: Bool) -> String {
+        guard !rawEndpoint.isEmpty else { return rawEndpoint }
+        if useFullURL {
+            return rawEndpoint
+        }
+
+        let trimmedPath = rawEndpoint.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        if trimmedPath.lowercased().hasSuffix("responses") {
+            return rawEndpoint
+        }
+
+        if rawEndpoint.hasSuffix("/") {
+            return rawEndpoint + "responses"
+        }
+        return rawEndpoint + "/responses"
+    }
+
+    private var scheduledTasksContent: some View {
+        VStack(alignment: .leading, spacing: 22) {
+            if isScheduledTaskEditorVisible {
+                scheduledTaskEditorPage
+            } else if !scheduledTasks.isEmpty {
+                scheduledTasksSegmentHeader
+                VStack(alignment: .leading, spacing: 14) {
+                    ForEach(scheduledTasks) { task in
+                        scheduledTaskCard(task)
+                    }
+                }
+            } else {
+                scheduledTasksEmptyState
+            }
+        }
+        .frame(maxWidth: .infinity, minHeight: 430, alignment: .topLeading)
+    }
+
+    private var scheduledTasksSegmentHeader: some View {
+        HStack(spacing: 12) {
+            Text("任务列表")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(
+                    Capsule()
+                        .fill(isDarkTheme ? Color.white.opacity(0.10) : Color.black.opacity(0.06))
+                )
+
+            Spacer(minLength: 8)
+
+            Button(action: {
+                openNewScheduledTaskEditor()
+            }) {
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 30, height: 30)
+                    .background(Circle().fill(isDarkTheme ? Color.white.opacity(0.08) : Color.white))
+                    .overlay {
+                        Circle().stroke(separatorColor, lineWidth: 1)
+                    }
+            }
+            .buttonStyle(.plain)
+            .help("新增定时任务")
+        }
+    }
+
+    private var scheduledTaskEditorPage: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 10) {
+                Button(action: {
+                    isScheduledTaskEditorVisible = false
+                }) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.primary)
+                        .frame(width: 30, height: 30)
+                        .background(Circle().fill(isDarkTheme ? Color.white.opacity(0.08) : Color.white))
+                        .overlay {
+                            Circle().stroke(separatorColor, lineWidth: 1)
+                        }
+                }
+                .buttonStyle(.plain)
+
+                Text(isEditingScheduledTask ? "编辑定时任务" : "新建定时任务")
+                    .font(.system(size: 18, weight: .black))
+                    .foregroundStyle(.primary)
+
+                Spacer(minLength: 8)
+            }
+
+            VStack(alignment: .leading, spacing: 16) {
+                scheduledTaskTextFieldRow(
+                    title: "任务标题",
+                    systemImage: "pencil",
+                    placeholder: "请输入任务标题",
+                    text: $scheduledTaskDraftTitle
+                )
+
+                scheduledTaskDescriptionRow
+
+                scheduledTaskIconEditorRow
+
+                scheduledTaskConfirmActionEditorRow
+
+                scheduledTaskActionButtonsEditorRow
+
+                scheduledTaskTimeEditorRow
+
+                HStack(spacing: 10) {
+                    Spacer(minLength: 8)
+
+                    Button("取消") {
+                        isScheduledTaskEditorVisible = false
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 72, height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(isDarkTheme ? Color.white.opacity(0.12) : Color.black.opacity(0.08))
+                    )
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(separatorColor, lineWidth: 0.8)
+                    }
+
+                    Button("保存") {
+                        saveScheduledTaskFromEditor()
+                    }
+                    .buttonStyle(.plain)
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 72, height: 34)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(scheduledTaskAccentColor)
+                    )
+                    .disabled(scheduledTaskDraftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .opacity(scheduledTaskDraftTitle.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? 0.45 : 1)
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.vertical, 18)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(scheduledTaskCardFillColor)
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .stroke(scheduledTaskCardStrokeColor, lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(isDarkTheme ? 0.18 : 0.05), radius: 8, x: 0, y: 3)
+        }
+    }
+
+    private func scheduledTaskTextFieldRow(
+        title: String,
+        systemImage: String,
+        placeholder: String,
+        text: Binding<String>
+    ) -> some View {
+        HStack(spacing: 12) {
+            scheduledTaskFormLabel(title: title, systemImage: systemImage)
+
+            TextField(placeholder, text: text)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12.5, weight: .semibold))
+        }
+    }
+
+    private var scheduledTaskDescriptionRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            scheduledTaskFormLabel(title: "任务描述", systemImage: "text.alignleft")
+
+            TextEditor(text: $scheduledTaskDraftDescription)
+                .font(.system(size: 12.5, weight: .semibold))
+                .scrollContentBackground(.hidden)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .frame(minHeight: 78)
+                .background(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(isDarkTheme ? Color.white.opacity(0.06) : Color.black.opacity(0.035))
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(separatorColor, lineWidth: 1)
+                }
+        }
+    }
+
+    private var scheduledTaskIconEditorRow: some View {
+        HStack(spacing: 12) {
+            scheduledTaskFormLabel(title: "弹窗图标", systemImage: "photo")
+
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isDarkTheme ? Color.white.opacity(0.06) : Color.black.opacity(0.035))
+
+                if let image = scheduledTaskDraftIconImage {
+                    Image(nsImage: image)
+                        .resizable()
+                        .scaledToFit()
+                        .padding(7)
+                } else {
+                    Image(systemName: "macwindow.on.rectangle")
+                        .font(.system(size: 22, weight: .medium))
+                        .foregroundStyle(scheduledTaskAccentColor)
+                }
+            }
+            .frame(width: 52, height: 52)
+            .overlay {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(separatorColor, lineWidth: 1)
+            }
+
+            Button("上传") {
+                selectScheduledTaskIcon()
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 12.5, weight: .bold))
+            .foregroundStyle(.white)
+            .frame(width: 64, height: 30)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(scheduledTaskAccentColor)
+            )
+
+            Button("移除") {
+                scheduledTaskDraftIconImageDataBase64 = nil
+            }
+            .buttonStyle(.plain)
+            .font(.system(size: 12.5, weight: .bold))
+            .foregroundStyle(.primary)
+            .frame(width: 64, height: 30)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isDarkTheme ? Color.white.opacity(0.12) : Color.black.opacity(0.08))
+            )
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(separatorColor, lineWidth: 0.8)
+            }
+            .disabled(scheduledTaskDraftIconImageDataBase64 == nil)
+            .opacity(scheduledTaskDraftIconImageDataBase64 == nil ? 0.45 : 1)
+
+            Spacer(minLength: 8)
+        }
+    }
+
+    private var scheduledTaskActionButtonsEditorRow: some View {
+        HStack(spacing: 12) {
+            scheduledTaskFormLabel(title: "弹窗按钮", systemImage: "rectangle.2.swap")
+
+            TextField("", text: $scheduledTaskDraftCancelButtonTitle)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12.5, weight: .semibold))
+
+            TextField("", text: $scheduledTaskDraftConfirmButtonTitle)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12.5, weight: .semibold))
+        }
+    }
+
+    private var scheduledTaskConfirmActionEditorRow: some View {
+        HStack(spacing: 12) {
+            scheduledTaskFormLabel(title: "确认动作", systemImage: "checkmark.circle")
+
+            Picker("", selection: $scheduledTaskDraftActionRawValue) {
+                ForEach(ScheduledTaskAction.allCases, id: \.rawValue) { action in
+                    Label(action.title, systemImage: action.systemImage)
+                        .tag(action.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 210)
+
+            Spacer(minLength: 8)
+        }
+    }
+
+    private var scheduledTaskDraftAction: ScheduledTaskAction {
+        ScheduledTaskAction(rawValue: scheduledTaskDraftActionRawValue) ?? .none
+    }
+
+    private var scheduledTaskDraftIconImage: NSImage? {
+        scheduledTaskIconImage(from: scheduledTaskDraftIconImageDataBase64)
+    }
+
+    private var scheduledTaskTimeEditorRow: some View {
+        HStack(spacing: 12) {
+            scheduledTaskFormLabel(title: "执行时间", systemImage: "clock")
+
+            Spacer(minLength: 8)
+
+            Picker("", selection: $scheduledTaskDraftRepeatKindRawValue) {
+                ForEach(ScheduledTaskRepeatKind.allCases, id: \.rawValue) { repeatKind in
+                    Text(repeatKind.title).tag(repeatKind.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(width: 150)
+            .onChange(of: scheduledTaskDraftRepeatKindRawValue) { newValue in
+                let repeatKind = ScheduledTaskRepeatKind(rawValue: newValue) ?? .daily
+                scheduledTaskDraftRepeatDayText = sanitizedRepeatDayText(
+                    scheduledTaskDraftRepeatDayText,
+                    repeatKind: repeatKind
+                )
+            }
+
+            if scheduledTaskDraftRepeatKind != .daily {
+                scheduledTaskRepeatDayInput(
+                    text: $scheduledTaskDraftRepeatDayText,
+                    repeatKind: scheduledTaskDraftRepeatKind
+                )
+                .onChange(of: scheduledTaskDraftRepeatDayText) { newValue in
+                    scheduledTaskDraftRepeatDayText = sanitizedRepeatDayText(
+                        newValue,
+                        repeatKind: scheduledTaskDraftRepeatKind
+                    )
+                }
+            }
+
+            scheduledTaskTimeInput(
+                text: $scheduledTaskDraftHourText,
+                suffix: "时"
+            )
+            .onChange(of: scheduledTaskDraftHourText) { newValue in
+                scheduledTaskDraftHourText = sanitizedTimeText(newValue, maxValue: 23)
+            }
+
+            scheduledTaskTimeInput(
+                text: $scheduledTaskDraftMinuteText,
+                suffix: "分"
+            )
+            .onChange(of: scheduledTaskDraftMinuteText) { newValue in
+                scheduledTaskDraftMinuteText = sanitizedTimeText(newValue, maxValue: 59)
+            }
+        }
+    }
+
+    private func scheduledTaskRepeatDayInput(
+        text: Binding<String>,
+        repeatKind: ScheduledTaskRepeatKind
+    ) -> some View {
+        HStack(spacing: 5) {
+            if repeatKind == .weekly {
+                Text("周")
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+
+            TextField(repeatKind == .weekly ? "1" : "1", text: text)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12.5, weight: .bold, design: .monospaced))
+                .multilineTextAlignment(.center)
+                .frame(width: 46)
+
+            if repeatKind == .monthly {
+                Text("号")
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func scheduledTaskTimeInput(text: Binding<String>, suffix: String) -> some View {
+        HStack(spacing: 5) {
+            TextField("00", text: text)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12.5, weight: .bold, design: .monospaced))
+                .multilineTextAlignment(.center)
+                .frame(width: 46)
+
+            Text(suffix)
+                .font(.system(size: 12.5, weight: .bold))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func scheduledTaskFormLabel(title: String, systemImage: String) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(scheduledTaskAccentColor)
+                .frame(width: 22, height: 22)
+                .background(Circle().fill(scheduledTaskAccentColor.opacity(isDarkTheme ? 0.18 : 0.10)))
+
+            Text(title)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.primary)
+                .frame(width: 76, alignment: .leading)
+        }
+    }
+
+    private func scheduledTaskCard(_ task: ScheduledTaskItem) -> some View {
+        let accentColor = scheduledTaskAccentColor
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(accentColor.opacity(isDarkTheme ? 0.18 : 0.10))
+                    if let iconImage = scheduledTaskIconImage(from: task.iconImageDataBase64) {
+                        Image(nsImage: iconImage)
+                            .resizable()
+                            .scaledToFit()
+                            .padding(13)
+                    } else {
+                        Image(systemName: scheduledTaskReminderType(for: task).systemImage)
+                            .font(.system(size: 24, weight: .medium))
+                            .foregroundStyle(accentColor)
+                    }
+                    if scheduledTaskAction(for: task) == .shutdown {
+                        Image(systemName: "power")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 22, height: 22)
+                            .background(Circle().fill(Color(hex: 0xFF4D55)))
+                            .offset(x: 24, y: 24)
+                    }
+                }
+                .frame(width: 72, height: 72)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("\(scheduledTaskDisplayTitle(for: task)) \(scheduledTaskTimeText(for: task))")
+                        .font(.system(size: 17, weight: .black))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+
+                    Text("\(scheduledTaskRepeatTimeText(for: task))：\(scheduledTaskDisplayDescription(for: task))")
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 12)
+
+                Toggle("", isOn: bindingForScheduledTaskEnabled(task.id))
+                    .labelsHidden()
+                    .toggleStyle(.switch)
+                    .tint(settingsAccentColor)
+            }
+            .padding(.horizontal, 24)
+            .padding(.top, 22)
+            .padding(.bottom, 18)
+
+            Divider().overlay(separatorColor)
+                .padding(.horizontal, 24)
+
+            HStack(spacing: 12) {
+                Spacer(minLength: 0)
+
+                Button(action: {
+                    presentedScheduledTaskMenuID = task.id
+                    isScheduledTaskMenuPresented.toggle()
+                }) {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .popover(
+                    isPresented: Binding(
+                        get: { isScheduledTaskMenuPresented && presentedScheduledTaskMenuID == task.id },
+                        set: { isPresented in
+                            isScheduledTaskMenuPresented = isPresented
+                            if !isPresented {
+                                presentedScheduledTaskMenuID = nil
+                            }
+                        }
+                    ),
+                    arrowEdge: .bottom
+                ) {
+                    scheduledTaskActionPopover(task)
+                }
+            }
+            .padding(.horizontal, 24)
+            .padding(.vertical, 18)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(scheduledTaskCardFillColor)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(scheduledTaskCardStrokeColor, lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(isDarkTheme ? 0.18 : 0.05), radius: 8, x: 0, y: 3)
+    }
+
+    private func scheduledTaskActionPopover(_ task: ScheduledTaskItem) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Button(action: {
+                isScheduledTaskMenuPresented = false
+                updateScheduledTask(task.id) { item in
+                    item.enabled = true
+                    item.reminderType = ScheduledTaskReminderType.popup.rawValue
+                }
+                NotificationCenter.default.post(name: .scheduledTaskReminderRequested, object: task.id)
+            }) {
+                Label("立即执行", systemImage: "play")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 132, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button(action: {
+                isScheduledTaskMenuPresented = false
+                openEditScheduledTaskEditor(task)
+            }) {
+                Label("编辑", systemImage: "pencil")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 132, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            Button(action: {
+                isScheduledTaskMenuPresented = false
+                removeScheduledTask(task.id)
+                NotificationCenter.default.post(name: .scheduledTaskReminderConfigurationChanged, object: nil)
+            }) {
+                Label("移除", systemImage: "trash")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Color(hex: 0xFF4D55))
+                    .frame(width: 132, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 10)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(isDarkTheme ? Color(hex: 0x202026) : Color.white)
+        )
+    }
+
+    private var scheduledTasksEmptyState: some View {
+        VStack(alignment: .center, spacing: 18) {
+            Spacer(minLength: 44)
+
+            Text("⏰")
+                .font(.system(size: 62))
+
+            Text("点击下方按钮，开启你的第一个任务吧")
+                .font(.system(size: 21, weight: .black))
+                .foregroundStyle(.primary)
+                .multilineTextAlignment(.center)
+
+            Button(action: {
+                openNewScheduledTaskEditor()
+            }) {
+                Text("新建定时任务")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 9)
+                    .background(Capsule().fill(scheduledTaskAccentColor))
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 80)
+        }
+        .frame(maxWidth: .infinity, minHeight: 350, alignment: .center)
+    }
+
+    private func scheduledTaskTimeText(for task: ScheduledTaskItem) -> String {
+        String(format: "%02d:%02d", task.hour, task.minute)
+    }
+
+    private func scheduledTaskChineseTimeText(for task: ScheduledTaskItem) -> String {
+        let period = task.hour < 12 ? "上午" : "下午"
+        let displayHour = task.hour <= 12 ? task.hour : task.hour - 12
+        return String(format: "%@%d:%02d", period, max(1, displayHour), task.minute)
+    }
+
+    private func scheduledTaskRepeatKind(for task: ScheduledTaskItem) -> ScheduledTaskRepeatKind {
+        ScheduledTaskRepeatKind(rawValue: task.repeatKind) ?? .daily
+    }
+
+    private var scheduledTaskDraftRepeatKind: ScheduledTaskRepeatKind {
+        ScheduledTaskRepeatKind(rawValue: scheduledTaskDraftRepeatKindRawValue) ?? .daily
+    }
+
+    private func scheduledTaskReminderType(for task: ScheduledTaskItem) -> ScheduledTaskReminderType {
+        ScheduledTaskReminderType(rawValue: task.reminderType) ?? .popup
+    }
+
+    private func scheduledTaskAction(for task: ScheduledTaskItem) -> ScheduledTaskAction {
+        ScheduledTaskAction(rawValue: task.action) ?? .none
+    }
+
+    private func scheduledTaskRepeatTimeText(for task: ScheduledTaskItem) -> String {
+        switch scheduledTaskRepeatKind(for: task) {
+        case .daily:
+            return "每天\(scheduledTaskChineseTimeText(for: task))"
+        case .weekly:
+            return "每周\(scheduledTaskWeekdayText(task.repeatDay))\(scheduledTaskChineseTimeText(for: task))"
+        case .monthly:
+            return "每月\(task.repeatDay)号\(scheduledTaskChineseTimeText(for: task))"
+        }
+    }
+
+    private func scheduledTaskWeekdayText(_ value: Int) -> String {
+        switch max(1, min(7, value)) {
+        case 1:
+            return "一"
+        case 2:
+            return "二"
+        case 3:
+            return "三"
+        case 4:
+            return "四"
+        case 5:
+            return "五"
+        case 6:
+            return "六"
+        default:
+            return "日"
+        }
+    }
+
+    private func scheduledTaskDisplayTitle(for task: ScheduledTaskItem) -> String {
+        let trimmed = task.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "未命名定时任务" : trimmed
+    }
+
+    private func scheduledTaskDisplayDescription(for task: ScheduledTaskItem) -> String {
+        let trimmed = task.description.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "无任务描述。" : trimmed
+    }
+
+    private func openNewScheduledTaskEditor() {
+        isEditingScheduledTask = false
+        editingScheduledTaskID = nil
+        scheduledTaskDraftTitle = ""
+        scheduledTaskDraftDescription = ""
+        scheduledTaskDraftActionRawValue = ScheduledTaskAction.none.rawValue
+        scheduledTaskDraftRepeatKindRawValue = ScheduledTaskRepeatKind.daily.rawValue
+        scheduledTaskDraftRepeatDayText = "1"
+        scheduledTaskDraftHourText = ""
+        scheduledTaskDraftMinuteText = ""
+        scheduledTaskDraftCancelButtonTitle = ""
+        scheduledTaskDraftConfirmButtonTitle = ""
+        isScheduledTaskEditorVisible = true
+    }
+
+    private func openEditScheduledTaskEditor(_ task: ScheduledTaskItem) {
+        isEditingScheduledTask = true
+        editingScheduledTaskID = task.id
+        scheduledTaskDraftTitle = task.title
+        scheduledTaskDraftDescription = task.description
+        scheduledTaskDraftActionRawValue = scheduledTaskAction(for: task).rawValue
+        scheduledTaskDraftRepeatKindRawValue = scheduledTaskRepeatKind(for: task).rawValue
+        scheduledTaskDraftRepeatDayText = "\(task.repeatDay)"
+        scheduledTaskDraftHourText = String(format: "%02d", task.hour)
+        scheduledTaskDraftMinuteText = String(format: "%02d", task.minute)
+        scheduledTaskDraftCancelButtonTitle = task.cancelButtonTitle
+        scheduledTaskDraftConfirmButtonTitle = task.confirmButtonTitle
+        isScheduledTaskEditorVisible = true
+    }
+
+    private func saveScheduledTaskFromEditor() {
+        let normalizedTask = ScheduledTaskItem(
+            id: editingScheduledTaskID ?? UUID().uuidString,
+            enabled: true,
+            title: scheduledTaskDraftTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+            description: scheduledTaskDraftDescription.trimmingCharacters(in: .whitespacesAndNewlines),
+            reminderType: ScheduledTaskReminderType.popup.rawValue,
+            action: scheduledTaskDraftAction.rawValue,
+            repeatKind: scheduledTaskDraftRepeatKind.rawValue,
+            repeatDay: clampedRepeatDayValue(
+                scheduledTaskDraftRepeatDayText,
+                repeatKind: scheduledTaskDraftRepeatKind
+            ),
+            hour: clampedTimeValue(scheduledTaskDraftHourText, maxValue: 23),
+            minute: clampedTimeValue(scheduledTaskDraftMinuteText, maxValue: 59),
+            cancelButtonTitle: normalizedScheduledTaskButtonTitle(
+                scheduledTaskDraftCancelButtonTitle,
+                fallback: "再卷一会儿"
+            ),
+            confirmButtonTitle: normalizedScheduledTaskButtonTitle(
+                scheduledTaskDraftConfirmButtonTitle,
+                fallback: "准点下班"
+            ),
+            iconImageDataBase64: scheduledTaskDraftIconImageDataBase64
+        )
+
+        if let editingScheduledTaskID,
+           let index = scheduledTasks.firstIndex(where: { $0.id == editingScheduledTaskID })
+        {
+            scheduledTasks[index] = normalizedTask
+        } else {
+            scheduledTasks.append(normalizedTask)
+        }
+
+        persistScheduledTasks()
+        editingScheduledTaskID = nil
+        isEditingScheduledTask = false
+        isScheduledTaskEditorVisible = false
+        NotificationCenter.default.post(name: .scheduledTaskReminderConfigurationChanged, object: nil)
+    }
+
+    private func normalizedScheduledTaskButtonTitle(_ value: String, fallback: String) -> String {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? fallback : trimmed
+    }
+
+    private func selectScheduledTaskIcon() {
+        let panel = NSOpenPanel()
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+        panel.canChooseFiles = true
+        panel.allowedContentTypes = [.image]
+
+        guard panel.runModal() == .OK,
+              let url = panel.url,
+              let data = try? Data(contentsOf: url)
+        else {
+            return
+        }
+
+        scheduledTaskDraftIconImageDataBase64 = data.base64EncodedString()
+    }
+
+    private func scheduledTaskIconImage(from base64: String?) -> NSImage? {
+        guard let base64,
+              let data = Data(base64Encoded: base64)
+        else {
+            return nil
+        }
+
+        return NSImage(data: data)
+    }
+
+    private func bindingForScheduledTaskEnabled(_ id: String) -> Binding<Bool> {
+        Binding(
+            get: {
+                scheduledTasks.first(where: { $0.id == id })?.enabled ?? false
+            },
+            set: { newValue in
+                updateScheduledTask(id) { item in
+                    item.enabled = newValue
+                }
+                NotificationCenter.default.post(name: .scheduledTaskReminderConfigurationChanged, object: nil)
+            }
+        )
+    }
+
+    private func updateScheduledTask(_ id: String, mutate: (inout ScheduledTaskItem) -> Void) {
+        guard let index = scheduledTasks.firstIndex(where: { $0.id == id }) else { return }
+        mutate(&scheduledTasks[index])
+        persistScheduledTasks()
+    }
+
+    private func removeScheduledTask(_ id: String) {
+        scheduledTasks.removeAll { $0.id == id }
+        persistScheduledTasks()
+    }
+
+    private func persistScheduledTasks() {
+        ScheduledTaskItem.saveAll(scheduledTasks)
+        scheduledTaskConfigured = !scheduledTasks.isEmpty
+    }
+
+    private func sanitizedTimeText(_ value: String, maxValue: Int) -> String {
+        let digits = value.filter(\.isNumber)
+        guard !digits.isEmpty else { return "" }
+        let limited = String(digits.prefix(2))
+        guard let parsed = Int(limited) else { return limited }
+        return "\(min(maxValue, parsed))"
+    }
+
+    private func sanitizedRepeatDayText(_ value: String, repeatKind: ScheduledTaskRepeatKind) -> String {
+        guard repeatKind != .daily else { return "1" }
+        let digits = value.filter(\.isNumber)
+        guard !digits.isEmpty else { return "" }
+        let limited = String(digits.prefix(2))
+        guard let parsed = Int(limited) else { return limited }
+        let maxValue = repeatKind == .weekly ? 7 : 31
+        return "\(max(1, min(maxValue, parsed)))"
+    }
+
+    private func clampedTimeValue(_ value: String, maxValue: Int) -> Int {
+        guard let parsed = Int(value) else { return 0 }
+        return max(0, min(maxValue, parsed))
+    }
+
+    private func clampedRepeatDayValue(_ value: String, repeatKind: ScheduledTaskRepeatKind) -> Int {
+        guard repeatKind != .daily else { return 1 }
+        let maxValue = repeatKind == .weekly ? 7 : 31
+        guard let parsed = Int(value) else { return 1 }
+        return max(1, min(maxValue, parsed))
+    }
+
+    private var scheduledTaskAccentColor: Color {
+        isCustomSkinSelected ? visibleThemeAccentColor : successBadgeColor
+    }
+
+    private var scheduledTaskCardFillColor: Color {
+        if isCustomSkinSelected {
+            return customSkinColor.opacity(customSkinBrightness < 0.28 ? 0.10 : 0.13)
+        }
+        return isDarkTheme ? Color.white.opacity(0.06) : Color.white
+    }
+
+    private var scheduledTaskCardStrokeColor: Color {
+        if isCustomSkinSelected {
+            return customSkinColor.opacity(0.34)
+        }
+        return separatorColor
     }
 
     private var singleModeSourceGroup: SourceSummaryGroupViewModel? {
@@ -2470,7 +4158,7 @@ struct MonitorDashboardShellView: View {
     private func subscriptionSummaryCard(_ item: SummaryPackageItem) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .center, spacing: 10) {
-                Text("codex \(item.title) 订阅")
+                Text("\(item.title) 订阅")
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -2512,8 +4200,8 @@ struct MonitorDashboardShellView: View {
 
         return [
             SummaryPackageItem(
-                title: "Basic",
-                subtitle: "到期 \(model.renewalValue)",
+                title: "未获取套餐数据",
+                subtitle: model.footerText,
                 badgeText: "",
                 badgeTone: .neutral
             ),
@@ -3122,16 +4810,17 @@ struct MonitorDashboardShellView: View {
                 Button(action: { onSelectUsageLogsPage?(pageNumber) }) {
                     Text("\(pageNumber)")
                         .font(.system(size: 11.5, weight: .semibold))
-                        .foregroundStyle(pageNumber == page ? Color.white : .secondary)
+                        .foregroundStyle(pageNumber == page ? usagePaginationSelectedTextColor : .secondary)
                         .frame(width: 28, height: 28)
                         .background(
                             RoundedRectangle(cornerRadius: 8.5, style: .continuous)
-                                .fill(pageNumber == page ? Color(hex: 0x57BF71) : Color.clear)
+                                .fill(pageNumber == page ? usagePaginationSelectedFillColor : Color.clear)
                         )
                         .overlay {
                             RoundedRectangle(cornerRadius: 8.5, style: .continuous)
                                 .stroke(separatorColor, lineWidth: pageNumber == page ? 0 : 0.8)
                         }
+                        .contentShape(RoundedRectangle(cornerRadius: 8.5, style: .continuous))
                 }
                 .buttonStyle(.plain)
             }
@@ -3148,6 +4837,17 @@ struct MonitorDashboardShellView: View {
                 action: { onSelectUsageLogsPage?(totalPages) }
             )
         }
+    }
+
+    private var usagePaginationSelectedFillColor: Color {
+        successBadgeColor
+    }
+
+    private var usagePaginationSelectedTextColor: Color {
+        if isCustomSkinSelected, customSkinBrightness > 0.74 {
+            return Color.black.opacity(0.86)
+        }
+        return .white
     }
 
     private func usageRecordsSummaryText(
@@ -3296,6 +4996,7 @@ struct MonitorDashboardShellView: View {
                     RoundedRectangle(cornerRadius: 8.5, style: .continuous)
                         .stroke(separatorColor, lineWidth: 0.8)
                 }
+                .contentShape(RoundedRectangle(cornerRadius: 8.5, style: .continuous))
         }
         .buttonStyle(.plain)
         .disabled(isDisabled)

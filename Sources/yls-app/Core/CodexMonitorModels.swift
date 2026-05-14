@@ -15,6 +15,260 @@ enum DefaultsKey {
     static let mcpEnabled = "mcp_enabled"
     static let mcpPort = "mcp_port"
     static let launchAtLoginEnabled = "launch_at_login_enabled"
+    static let scheduledTaskConfigured = "scheduled_task_configured"
+    static let scheduledTaskEnabled = "scheduled_task_enabled"
+    static let scheduledTaskHour = "scheduled_task_hour"
+    static let scheduledTaskMinute = "scheduled_task_minute"
+    static let scheduledTaskRepeatKind = "scheduled_task_repeat_kind"
+    static let scheduledTaskRepeatDay = "scheduled_task_repeat_day"
+    static let scheduledTaskTitle = "scheduled_task_title"
+    static let scheduledTaskDescription = "scheduled_task_description"
+    static let scheduledTaskReminderType = "scheduled_task_reminder_type"
+    static let scheduledTaskAction = "scheduled_task_action"
+    static let scheduledTaskCancelButtonTitle = "scheduled_task_cancel_button_title"
+    static let scheduledTaskConfirmButtonTitle = "scheduled_task_confirm_button_title"
+    static let scheduledTasks = "scheduled_tasks"
+    static let codexSwitchProviders = "codex_switch_providers"
+}
+
+extension Notification.Name {
+    static let scheduledTaskReminderRequested = Notification.Name("scheduled_task_reminder_requested")
+    static let scheduledTaskReminderConfigurationChanged = Notification.Name("scheduled_task_reminder_configuration_changed")
+}
+
+struct ScheduledTaskItem: Codable, Identifiable, Equatable {
+    enum Action: String, Codable, CaseIterable {
+        case none
+        case shutdown
+    }
+
+    var id: String
+    var enabled: Bool
+    var title: String
+    var description: String
+    var reminderType: String
+    var action: String
+    var repeatKind: String
+    var repeatDay: Int
+    var hour: Int
+    var minute: Int
+    var cancelButtonTitle: String
+    var confirmButtonTitle: String
+    var iconImageDataBase64: String?
+
+    init(
+        id: String,
+        enabled: Bool,
+        title: String,
+        description: String,
+        reminderType: String,
+        action: String,
+        repeatKind: String,
+        repeatDay: Int,
+        hour: Int,
+        minute: Int,
+        cancelButtonTitle: String,
+        confirmButtonTitle: String,
+        iconImageDataBase64: String? = nil
+    ) {
+        self.id = id
+        self.enabled = enabled
+        self.title = title
+        self.description = description
+        self.reminderType = reminderType
+        self.action = Self.normalizedAction(action)
+        self.repeatKind = repeatKind
+        self.repeatDay = repeatDay
+        self.hour = hour
+        self.minute = minute
+        self.cancelButtonTitle = cancelButtonTitle
+        self.confirmButtonTitle = confirmButtonTitle
+        self.iconImageDataBase64 = iconImageDataBase64
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case enabled
+        case title
+        case description
+        case reminderType
+        case action
+        case repeatKind
+        case repeatDay
+        case hour
+        case minute
+        case cancelButtonTitle
+        case confirmButtonTitle
+        case iconImageDataBase64
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        enabled = try container.decode(Bool.self, forKey: .enabled)
+        title = try container.decode(String.self, forKey: .title)
+        description = try container.decode(String.self, forKey: .description)
+        reminderType = try container.decode(String.self, forKey: .reminderType)
+        repeatKind = try container.decode(String.self, forKey: .repeatKind)
+        repeatDay = try container.decode(Int.self, forKey: .repeatDay)
+        hour = try container.decode(Int.self, forKey: .hour)
+        minute = try container.decode(Int.self, forKey: .minute)
+        cancelButtonTitle = try container.decode(String.self, forKey: .cancelButtonTitle)
+        confirmButtonTitle = try container.decode(String.self, forKey: .confirmButtonTitle)
+        iconImageDataBase64 = try container.decodeIfPresent(String.self, forKey: .iconImageDataBase64)
+        action = Self.normalizedAction(
+            try container.decodeIfPresent(String.self, forKey: .action)
+                ?? Self.inferredAction(title: title, description: description, confirmButtonTitle: confirmButtonTitle)
+        )
+    }
+
+    static func loadAll(from defaults: UserDefaults = .standard) -> [ScheduledTaskItem] {
+        if let data = defaults.data(forKey: DefaultsKey.scheduledTasks),
+           let items = try? JSONDecoder().decode([ScheduledTaskItem].self, from: data)
+        {
+            return items
+        }
+
+        guard let legacy = legacyItem(from: defaults) else {
+            return []
+        }
+        saveAll([legacy], to: defaults)
+        return [legacy]
+    }
+
+    static func saveAll(_ items: [ScheduledTaskItem], to defaults: UserDefaults = .standard) {
+        if let data = try? JSONEncoder().encode(items) {
+            defaults.set(data, forKey: DefaultsKey.scheduledTasks)
+        }
+        defaults.set(!items.isEmpty, forKey: DefaultsKey.scheduledTaskConfigured)
+    }
+
+    private static func legacyItem(from defaults: UserDefaults) -> ScheduledTaskItem? {
+        guard defaults.bool(forKey: DefaultsKey.scheduledTaskConfigured) else { return nil }
+        return ScheduledTaskItem(
+            id: UUID().uuidString,
+            enabled: defaults.object(forKey: DefaultsKey.scheduledTaskEnabled) == nil
+                ? true
+                : defaults.bool(forKey: DefaultsKey.scheduledTaskEnabled),
+            title: defaults.string(forKey: DefaultsKey.scheduledTaskTitle) ?? "",
+            description: defaults.string(forKey: DefaultsKey.scheduledTaskDescription) ?? "",
+            reminderType: defaults.string(forKey: DefaultsKey.scheduledTaskReminderType) ?? "popup",
+            action: defaults.string(forKey: DefaultsKey.scheduledTaskAction) ?? inferredAction(
+                title: defaults.string(forKey: DefaultsKey.scheduledTaskTitle) ?? "",
+                description: defaults.string(forKey: DefaultsKey.scheduledTaskDescription) ?? "",
+                confirmButtonTitle: defaults.string(forKey: DefaultsKey.scheduledTaskConfirmButtonTitle) ?? "准点下班"
+            ),
+            repeatKind: defaults.string(forKey: DefaultsKey.scheduledTaskRepeatKind) ?? "daily",
+            repeatDay: max(1, defaults.integer(forKey: DefaultsKey.scheduledTaskRepeatDay)),
+            hour: max(0, min(23, defaults.integer(forKey: DefaultsKey.scheduledTaskHour))),
+            minute: max(0, min(59, defaults.integer(forKey: DefaultsKey.scheduledTaskMinute))),
+            cancelButtonTitle: defaults.string(forKey: DefaultsKey.scheduledTaskCancelButtonTitle) ?? "再卷一会儿",
+            confirmButtonTitle: defaults.string(forKey: DefaultsKey.scheduledTaskConfirmButtonTitle) ?? "准点下班"
+        )
+    }
+
+    static func normalizedAction(_ value: String) -> String {
+        Action(rawValue: value)?.rawValue ?? Action.none.rawValue
+    }
+
+    static func inferredAction(title: String, description: String, confirmButtonTitle: String) -> String {
+        let source = "\(title) \(description)"
+        return source.contains("关机") || source.contains("下班")
+            ? Action.shutdown.rawValue
+            : Action.none.rawValue
+    }
+}
+
+struct CodexSwitchProviderItem: Codable, Identifiable, Equatable {
+    enum Scope: String, Codable, CaseIterable {
+        case appSpecific
+        case universal
+
+        var title: String {
+            switch self {
+            case .appSpecific:
+                return "应用专属"
+            case .universal:
+                return "通用"
+            }
+        }
+    }
+
+    var id: String
+    var scope: String
+    var preset: String
+    var name: String
+    var endpoint: String
+    var useFullURL: Bool
+    var apiKey: String
+    var website: String
+    var notes: String
+
+    init(
+        id: String,
+        scope: String,
+        preset: String,
+        name: String,
+        endpoint: String,
+        useFullURL: Bool = false,
+        apiKey: String,
+        website: String,
+        notes: String
+    ) {
+        self.id = id
+        self.scope = Self.normalizedScope(scope)
+        self.preset = preset
+        self.name = name
+        self.endpoint = endpoint
+        self.useFullURL = useFullURL
+        self.apiKey = apiKey
+        self.website = website
+        self.notes = notes
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case scope
+        case preset
+        case name
+        case endpoint
+        case useFullURL
+        case apiKey
+        case website
+        case notes
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+        scope = Self.normalizedScope(try container.decode(String.self, forKey: .scope))
+        preset = try container.decode(String.self, forKey: .preset)
+        name = try container.decode(String.self, forKey: .name)
+        endpoint = try container.decode(String.self, forKey: .endpoint)
+        useFullURL = try container.decodeIfPresent(Bool.self, forKey: .useFullURL) ?? false
+        apiKey = try container.decode(String.self, forKey: .apiKey)
+        website = try container.decode(String.self, forKey: .website)
+        notes = try container.decode(String.self, forKey: .notes)
+    }
+
+    static func loadAll(from defaults: UserDefaults = .standard) -> [CodexSwitchProviderItem] {
+        if let data = defaults.data(forKey: DefaultsKey.codexSwitchProviders),
+           let items = try? JSONDecoder().decode([CodexSwitchProviderItem].self, from: data)
+        {
+            return items
+        }
+        return []
+    }
+
+    static func saveAll(_ items: [CodexSwitchProviderItem], to defaults: UserDefaults = .standard) {
+        if let data = try? JSONEncoder().encode(items) {
+            defaults.set(data, forKey: DefaultsKey.codexSwitchProviders)
+        }
+    }
+
+    static func normalizedScope(_ rawValue: String) -> String {
+        Scope(rawValue: rawValue)?.rawValue ?? Scope.appSpecific.rawValue
+    }
 }
 
 enum AppMeta {
@@ -482,12 +736,14 @@ struct PackagePayload: Decodable {
 }
 
 struct PackageItem: Decodable {
+    let subType: String?
     let packageType: String?
     let packageStatus: String?
     let startAt: String?
     let expiresAt: String?
 
     enum CodingKeys: String, CodingKey {
+        case subType = "sub_type"
         case packageType = "package_type"
         case packageStatus = "package_status"
         case startAt = "start_at"

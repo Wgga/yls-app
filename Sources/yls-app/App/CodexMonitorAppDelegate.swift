@@ -23,6 +23,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     private var mainWindow: NSWindow?
     private var timer: Timer?
+    private var scheduledTaskTimer: Timer?
+    private var lastPresentedScheduledTaskOccurrence: String?
     private lazy var mcpServer = MCPHTTPServer(port: AppMeta.defaultMCPPort) { [weak self] in
         guard let self else { return Data("{}".utf8) }
         return self.mcpSnapshotStore.get()
@@ -56,7 +58,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         setupSummaryView()
         setupMenu()
         setupStatusButton()
+        observeScheduledTaskReminderRequests()
         startPolling()
+        startScheduledTaskReminderTimer()
         startMCPIfNeeded()
         mcpSnapshotStore.set(makeMCPSnapshotData())
         showMainWindow()
@@ -98,6 +102,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
 
     func applicationWillTerminate(_ notification: Notification) {
         timer?.invalidate()
+        scheduledTaskTimer?.invalidate()
+        NotificationCenter.default.removeObserver(self)
         mcpServer.stop()
     }
 
@@ -331,8 +337,108 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         )
     }
 
+    private func startScheduledTaskReminderTimer() {
+        scheduledTaskTimer?.invalidate()
+        scheduledTaskTimer = Timer.scheduledTimer(
+            timeInterval: 15,
+            target: self,
+            selector: #selector(handleScheduledTaskTimerTick),
+            userInfo: nil,
+            repeats: true
+        )
+        presentScheduledTaskReminderIfDue()
+    }
+
     @objc private func handleTimerTick() {
         store.refreshNow()
+    }
+
+    @objc private func handleScheduledTaskTimerTick() {
+        presentScheduledTaskReminderIfDue()
+    }
+
+    private func observeScheduledTaskReminderRequests() {
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleScheduledTaskReminderRequested(_:)),
+            name: .scheduledTaskReminderRequested,
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleScheduledTaskReminderConfigurationChanged),
+            name: .scheduledTaskReminderConfigurationChanged,
+            object: nil
+        )
+    }
+
+    @objc private func handleScheduledTaskReminderRequested(_ notification: Notification) {
+        let reminders = ScheduledTaskReminder.fromDefaults(requireEnabled: false)
+        let reminder: ScheduledTaskReminder?
+        if let id = notification.object as? String {
+            reminder = reminders.first { $0.id == id }
+        } else {
+            reminder = reminders.first
+        }
+
+        guard let reminder else { return }
+        showScheduledTaskReminder(reminder)
+    }
+
+    @objc private func handleScheduledTaskReminderConfigurationChanged() {
+        lastPresentedScheduledTaskOccurrence = nil
+        presentScheduledTaskReminderIfDue()
+    }
+
+    private func presentScheduledTaskReminderIfDue(at date: Date = Date()) {
+        let calendar = Calendar.current
+        for reminder in ScheduledTaskReminder.fromDefaults(requireEnabled: true) {
+            guard reminder.isDue(at: date, calendar: calendar) else { continue }
+
+            let occurrenceID = reminder.occurrenceID(at: date, calendar: calendar)
+            guard occurrenceID != lastPresentedScheduledTaskOccurrence else { continue }
+
+            lastPresentedScheduledTaskOccurrence = occurrenceID
+            showScheduledTaskReminder(reminder)
+            return
+        }
+    }
+
+    private func showScheduledTaskReminder(_ reminder: ScheduledTaskReminder) {
+        NSApp.activate(ignoringOtherApps: true)
+
+        let panel = ScheduledTaskReminderPanel(reminder: reminder) { [weak self] in
+            switch reminder.action {
+            case .shutdown:
+                self?.requestSystemShutdown()
+            case .none:
+                break
+            }
+        }
+        panel.center()
+        panel.makeKeyAndOrderFront(nil)
+        NSApp.runModal(for: panel)
+    }
+
+    private func requestSystemShutdown() {
+        guard let script = NSAppleScript(source: #"tell application "System Events" to shut down"#) else {
+            showError("无法创建关机脚本。")
+            return
+        }
+
+        var error: NSDictionary?
+        script.executeAndReturnError(&error)
+
+        if let error {
+            let message = (error[NSAppleScript.errorMessage] as? String) ?? "未知错误"
+            showError(
+                """
+                无法执行系统关机：\(message)
+
+                如果是首次使用，请在系统设置 > 隐私与安全性 > 自动化 中允许 \(AppMeta.displayName) 控制 System Events。
+                """
+            )
+        }
     }
 
     @objc private func handleOpenDashboard() {
@@ -787,5 +893,604 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSWind
         alert.alertStyle = .warning
         alert.addButton(withTitle: "知道了")
         alert.runModal()
+    }
+}
+
+private struct ScheduledTaskReminder {
+    enum RepeatKind: String {
+        case daily
+        case weekly
+        case monthly
+    }
+
+    let id: String
+    let title: String
+    let description: String
+    let action: Action
+    let repeatKind: RepeatKind
+    let repeatDay: Int
+    let hour: Int
+    let minute: Int
+    let cancelButtonTitle: String
+    let confirmButtonTitle: String
+    let iconImage: NSImage?
+
+    enum Action: String {
+        case none
+        case shutdown
+    }
+
+    static func fromDefaults(
+        _ defaults: UserDefaults = .standard,
+        requireEnabled: Bool
+    ) -> [ScheduledTaskReminder] {
+        ScheduledTaskItem.loadAll(from: defaults).compactMap { item -> ScheduledTaskReminder? in
+            guard !requireEnabled || item.enabled else { return nil }
+            guard item.reminderType == "popup" else { return nil }
+            let repeatKind = RepeatKind(rawValue: item.repeatKind) ?? .daily
+            let title = item.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let description = item.description.trimmingCharacters(in: .whitespacesAndNewlines)
+            let cancelButtonTitle = item.cancelButtonTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            let confirmButtonTitle = item.confirmButtonTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+            let iconImage = item.iconImageDataBase64
+                .flatMap { Data(base64Encoded: $0) }
+                .flatMap { NSImage(data: $0) }
+
+            return ScheduledTaskReminder(
+                id: item.id,
+                title: title.isEmpty ? "电脑在线摆烂中" : title,
+                description: description.isEmpty ? "CPU 都快冒烟了，赶紧关机，放我一码吧 🙏" : description,
+                action: Action(rawValue: item.action) ?? .none,
+                repeatKind: repeatKind,
+                repeatDay: Self.normalizedRepeatDay(item.repeatDay, repeatKind: repeatKind),
+                hour: max(0, min(23, item.hour)),
+                minute: max(0, min(59, item.minute)),
+                cancelButtonTitle: cancelButtonTitle.isEmpty ? "再卷一会儿" : cancelButtonTitle,
+                confirmButtonTitle: confirmButtonTitle.isEmpty ? "准点下班" : confirmButtonTitle,
+                iconImage: iconImage
+            )
+        }
+    }
+
+    var informativeText: String {
+        let body = description.isEmpty ? "该处理你的定时任务了。" : description
+        return "\(body)\n\n提醒方式：弹窗提醒\n执行时间：\(repeatTimeText)"
+    }
+
+    var repeatTimeText: String {
+        let timeText = String(format: "%02d:%02d", hour, minute)
+        switch repeatKind {
+        case .daily:
+            return "每天 \(timeText)"
+        case .weekly:
+            return "每周\(Self.weekdayText(repeatDay)) \(timeText)"
+        case .monthly:
+            return "每月\(repeatDay)号 \(timeText)"
+        }
+    }
+
+    func isDue(at date: Date, calendar: Calendar) -> Bool {
+        let components = calendar.dateComponents([.day, .weekday, .hour, .minute], from: date)
+        guard components.hour == hour, components.minute == minute else { return false }
+
+        switch repeatKind {
+        case .daily:
+            return true
+        case .weekly:
+            return components.weekday == calendarWeekday(from: repeatDay)
+        case .monthly:
+            return components.day == repeatDay
+        }
+    }
+
+    func occurrenceID(at date: Date, calendar: Calendar) -> String {
+        let components = calendar.dateComponents([.year, .month, .day, .hour, .minute], from: date)
+        return [
+            id,
+            repeatKind.rawValue,
+            "\(components.year ?? 0)",
+            "\(components.month ?? 0)",
+            "\(components.day ?? 0)",
+            "\(components.hour ?? 0)",
+            "\(components.minute ?? 0)",
+        ].joined(separator: "-")
+    }
+
+    private static func normalizedRepeatDay(_ value: Int, repeatKind: RepeatKind) -> Int {
+        switch repeatKind {
+        case .daily:
+            return 1
+        case .weekly:
+            return max(1, min(7, value))
+        case .monthly:
+            return max(1, min(31, value))
+        }
+    }
+
+    private static func weekdayText(_ value: Int) -> String {
+        switch max(1, min(7, value)) {
+        case 1:
+            return "一"
+        case 2:
+            return "二"
+        case 3:
+            return "三"
+        case 4:
+            return "四"
+        case 5:
+            return "五"
+        case 6:
+            return "六"
+        default:
+            return "日"
+        }
+    }
+
+    private func calendarWeekday(from scheduledWeekday: Int) -> Int {
+        scheduledWeekday == 7 ? 1 : scheduledWeekday + 1
+    }
+}
+
+@MainActor
+private final class ScheduledTaskReminderPanel: NSPanel {
+    private let onConfirm: () -> Void
+
+    init(reminder: ScheduledTaskReminder, onConfirm: @escaping () -> Void) {
+        self.onConfirm = onConfirm
+        let size = NSSize(width: 420, height: 124)
+        let palette = ScheduledTaskReminderThemePalette.current()
+        super.init(
+            contentRect: NSRect(origin: .zero, size: size),
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+
+        isOpaque = false
+        backgroundColor = .clear
+        appearance = palette.appearance
+        hasShadow = true
+        level = .floating
+        isMovableByWindowBackground = true
+        collectionBehavior = [.transient, .ignoresCycle]
+        contentView = ScheduledTaskReminderContentView(
+            reminder: reminder,
+            palette: palette,
+            onCancel: { [weak self] in
+                self?.closeModalPanel()
+            },
+            onConfirm: { [weak self] in
+                self?.confirmAndClose()
+            }
+        )
+    }
+
+    override var canBecomeKey: Bool { true }
+
+    override func keyDown(with event: NSEvent) {
+        switch event.keyCode {
+        case 36, 76:
+            confirmAndClose()
+        case 53:
+            closeModalPanel()
+        default:
+            super.keyDown(with: event)
+        }
+    }
+
+    private func confirmAndClose() {
+        closeModalPanel()
+        onConfirm()
+    }
+
+    private func closeModalPanel() {
+        NSApp.stopModal()
+        orderOut(nil)
+    }
+}
+
+@MainActor
+private final class ScheduledTaskReminderContentView: NSView {
+    private let onCancel: () -> Void
+    private let onConfirm: () -> Void
+
+    init(
+        reminder: ScheduledTaskReminder,
+        palette: ScheduledTaskReminderThemePalette,
+        onCancel: @escaping () -> Void,
+        onConfirm: @escaping () -> Void
+    ) {
+        self.onCancel = onCancel
+        self.onConfirm = onConfirm
+        super.init(frame: NSRect(x: 0, y: 0, width: 420, height: 124))
+        wantsLayer = true
+        layer?.backgroundColor = palette.bodyBackground.cgColor
+        layer?.cornerRadius = 13
+        layer?.borderColor = palette.border.cgColor
+        layer?.borderWidth = 1
+        layer?.masksToBounds = true
+        buildView(reminder, palette: palette)
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var isFlipped: Bool { true }
+
+    private func buildView(_ reminder: ScheduledTaskReminder, palette: ScheduledTaskReminderThemePalette) {
+        let titleBar = NSView()
+        titleBar.wantsLayer = true
+        titleBar.layer?.backgroundColor = palette.titleBackground.cgColor
+        titleBar.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(titleBar)
+
+        let titleLabel = NSTextField(labelWithString: reminder.title)
+        titleLabel.font = .systemFont(ofSize: 15, weight: .bold)
+        titleLabel.textColor = palette.primaryText
+        titleLabel.alignment = .center
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        titleBar.addSubview(titleLabel)
+
+        let divider = NSView()
+        divider.wantsLayer = true
+        divider.layer?.backgroundColor = palette.divider.cgColor
+        divider.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(divider)
+
+        let iconView = ReminderChipIconView(palette: palette, image: reminder.iconImage)
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(iconView)
+
+        let messageLabel = NSTextField(labelWithString: reminder.description)
+        messageLabel.font = .systemFont(ofSize: 13.5, weight: .bold)
+        messageLabel.textColor = palette.primaryText
+        messageLabel.alignment = .center
+        messageLabel.lineBreakMode = .byWordWrapping
+        messageLabel.maximumNumberOfLines = 2
+        messageLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(messageLabel)
+
+        let cancelButton = ReminderActionButton(
+            title: reminder.cancelButtonTitle,
+            fillColor: palette.secondaryButton,
+            highlightColor: palette.secondaryButtonHighlight,
+            borderColor: palette.secondaryButtonBorder,
+            textColor: palette.buttonText,
+            action: onCancel
+        )
+        let confirmButton = ReminderActionButton(
+            title: reminder.confirmButtonTitle,
+            fillColor: palette.primaryButton,
+            highlightColor: palette.primaryButtonHighlight,
+            borderColor: palette.primaryButtonBorder,
+            textColor: palette.buttonText,
+            action: onConfirm
+        )
+
+        let buttonStack = NSStackView(views: [cancelButton, confirmButton])
+        buttonStack.orientation = .horizontal
+        buttonStack.spacing = 12
+        buttonStack.distribution = .fillEqually
+        buttonStack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(buttonStack)
+
+        NSLayoutConstraint.activate([
+            titleBar.topAnchor.constraint(equalTo: topAnchor),
+            titleBar.leadingAnchor.constraint(equalTo: leadingAnchor),
+            titleBar.trailingAnchor.constraint(equalTo: trailingAnchor),
+            titleBar.heightAnchor.constraint(equalToConstant: 28),
+
+            titleLabel.centerXAnchor.constraint(equalTo: titleBar.centerXAnchor),
+            titleLabel.centerYAnchor.constraint(equalTo: titleBar.centerYAnchor),
+            titleLabel.leadingAnchor.constraint(greaterThanOrEqualTo: titleBar.leadingAnchor, constant: 18),
+            titleLabel.trailingAnchor.constraint(lessThanOrEqualTo: titleBar.trailingAnchor, constant: -18),
+
+            divider.topAnchor.constraint(equalTo: titleBar.bottomAnchor),
+            divider.leadingAnchor.constraint(equalTo: leadingAnchor),
+            divider.trailingAnchor.constraint(equalTo: trailingAnchor),
+            divider.heightAnchor.constraint(equalToConstant: 1),
+
+            iconView.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 26),
+            iconView.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 17),
+            iconView.widthAnchor.constraint(equalToConstant: 64),
+            iconView.heightAnchor.constraint(equalToConstant: 58),
+
+            messageLabel.leadingAnchor.constraint(equalTo: iconView.trailingAnchor, constant: 20),
+            messageLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
+            messageLabel.topAnchor.constraint(equalTo: divider.bottomAnchor, constant: 20),
+
+            buttonStack.topAnchor.constraint(equalTo: messageLabel.bottomAnchor, constant: 14),
+            buttonStack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -20),
+            buttonStack.widthAnchor.constraint(equalToConstant: 178),
+            buttonStack.heightAnchor.constraint(equalToConstant: 22),
+        ])
+    }
+}
+
+private final class ReminderActionButton: NSControl {
+    private let titleLabel = NSTextField(labelWithString: "")
+    private let fillColor: NSColor
+    private let highlightColor: NSColor
+    private let actionHandler: () -> Void
+    private var isPressed = false {
+        didSet {
+            layer?.backgroundColor = (isPressed ? highlightColor : fillColor).cgColor
+        }
+    }
+
+    init(
+        title: String,
+        fillColor: NSColor,
+        highlightColor: NSColor,
+        borderColor: NSColor,
+        textColor: NSColor,
+        action: @escaping () -> Void
+    ) {
+        self.fillColor = fillColor
+        self.highlightColor = highlightColor
+        actionHandler = action
+        super.init(frame: .zero)
+
+        wantsLayer = true
+        layer?.backgroundColor = fillColor.cgColor
+        layer?.cornerRadius = 6
+        layer?.borderColor = borderColor.cgColor
+        layer?.borderWidth = 0.6
+        layer?.masksToBounds = true
+
+        titleLabel.stringValue = title
+        titleLabel.font = .systemFont(ofSize: 12.5, weight: .bold)
+        titleLabel.textColor = textColor
+        titleLabel.alignment = .center
+        titleLabel.lineBreakMode = .byTruncatingTail
+        titleLabel.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(titleLabel)
+
+        NSLayoutConstraint.activate([
+            titleLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 10),
+            titleLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),
+            titleLabel.centerYAnchor.constraint(equalTo: centerYAnchor, constant: -0.5),
+        ])
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override func mouseDown(with event: NSEvent) {
+        isPressed = true
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let location = convert(event.locationInWindow, from: nil)
+        let shouldTrigger = bounds.contains(location)
+        isPressed = false
+        if shouldTrigger {
+            actionHandler()
+        }
+    }
+}
+
+private final class ReminderChipIconView: NSView {
+    private let palette: ScheduledTaskReminderThemePalette
+    private let image: NSImage?
+
+    init(palette: ScheduledTaskReminderThemePalette, image: NSImage?) {
+        self.palette = palette
+        self.image = image
+        super.init(frame: .zero)
+        wantsLayer = true
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    override var isFlipped: Bool { true }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+
+        if let image {
+            image.draw(
+                in: aspectFitRect(for: image.size, inside: NSRect(x: 2, y: 2, width: bounds.width - 4, height: bounds.height - 4)),
+                from: .zero,
+                operation: .sourceOver,
+                fraction: 1,
+                respectFlipped: true,
+                hints: [.interpolation: NSImageInterpolation.high]
+            )
+            return
+        }
+
+        let chipRect = NSRect(x: 10, y: 28, width: 46, height: 24)
+        let chipPath = NSBezierPath(roundedRect: chipRect, xRadius: 4, yRadius: 4)
+        palette.iconChipFill.setFill()
+        chipPath.fill()
+        palette.iconChipStroke.setStroke()
+        chipPath.lineWidth = 1.2
+        chipPath.stroke()
+
+        palette.iconPin.setStroke()
+        for index in 0..<5 {
+            let x = chipRect.minX + 7 + CGFloat(index) * 8
+            let path = NSBezierPath()
+            path.move(to: NSPoint(x: x, y: chipRect.maxY))
+            path.line(to: NSPoint(x: x - 4, y: chipRect.maxY + 7))
+            path.lineWidth = 1.6
+            path.stroke()
+        }
+
+        let smoke = NSBezierPath()
+        smoke.appendOval(in: NSRect(x: 17, y: 16, width: 15, height: 13))
+        smoke.appendOval(in: NSRect(x: 27, y: 12, width: 17, height: 16))
+        smoke.appendOval(in: NSRect(x: 37, y: 17, width: 13, height: 12))
+        smoke.appendOval(in: NSRect(x: 24, y: 23, width: 21, height: 13))
+        palette.iconSmokeFill.setFill()
+        smoke.fill()
+        palette.iconSmokeStroke.setStroke()
+        smoke.lineWidth = 1
+        smoke.stroke()
+
+        let stemPath = NSBezierPath()
+        stemPath.move(to: NSPoint(x: chipRect.midX, y: chipRect.minY + 4))
+        stemPath.curve(
+            to: NSPoint(x: 34, y: 24),
+            controlPoint1: NSPoint(x: 28, y: 26),
+            controlPoint2: NSPoint(x: 35, y: 28)
+        )
+        palette.iconSmokeStroke.setStroke()
+        stemPath.lineWidth = 2
+        stemPath.stroke()
+    }
+
+    private func aspectFitRect(for imageSize: NSSize, inside rect: NSRect) -> NSRect {
+        guard imageSize.width > 0, imageSize.height > 0, rect.width > 0, rect.height > 0 else {
+            return rect
+        }
+
+        let scale = min(rect.width / imageSize.width, rect.height / imageSize.height)
+        let width = imageSize.width * scale
+        let height = imageSize.height * scale
+        return NSRect(
+            x: rect.midX - width / 2,
+            y: rect.midY - height / 2,
+            width: width,
+            height: height
+        )
+    }
+}
+
+private struct ScheduledTaskReminderThemePalette {
+    let appearance: NSAppearance
+    let titleBackground: NSColor
+    let bodyBackground: NSColor
+    let border: NSColor
+    let divider: NSColor
+    let primaryText: NSColor
+    let secondaryButton: NSColor
+    let secondaryButtonHighlight: NSColor
+    let secondaryButtonBorder: NSColor
+    let primaryButton: NSColor
+    let primaryButtonHighlight: NSColor
+    let primaryButtonBorder: NSColor
+    let buttonText: NSColor
+    let iconChipFill: NSColor
+    let iconChipStroke: NSColor
+    let iconPin: NSColor
+    let iconSmokeFill: NSColor
+    let iconSmokeStroke: NSColor
+
+    @MainActor
+    static func current(defaults: UserDefaults = .standard) -> ScheduledTaskReminderThemePalette {
+        let rawSource = defaults.string(forKey: "skin_source_option") ?? "official"
+        let rawTheme = defaults.string(forKey: "skin_theme_option") ?? "defaultFollowSystem"
+        let customHue = defaults.object(forKey: "skin_custom_hue") as? Double ?? 0
+        let customBrightness = defaults.object(forKey: "skin_custom_brightness") as? Double ?? 1
+        let isCustom = rawSource == "vipCustom"
+        let isDark: Bool
+        if isCustom {
+            isDark = true
+        } else {
+            switch rawTheme {
+            case "ivoryWhite":
+                isDark = false
+            case "coolBlack":
+                isDark = true
+            default:
+                isDark = NSApp.effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+            }
+        }
+
+        if isCustom {
+            let baseBrightness = max(0.12, min(0.92, customBrightness))
+            let saturation: CGFloat = customBrightness <= 0.02 ? 0 : 0.30
+            let accentSaturation: CGFloat = customBrightness <= 0.02 ? 0 : 0.78
+            let accentBrightness = max(0.42, min(1, baseBrightness))
+            let accent = NSColor(
+                calibratedHue: CGFloat(max(0, min(1, customHue))),
+                saturation: accentSaturation,
+                brightness: accentBrightness,
+                alpha: 1
+            )
+            let body = NSColor(
+                calibratedHue: CGFloat(max(0, min(1, customHue))),
+                saturation: saturation,
+                brightness: max(0.02, min(1, baseBrightness * 0.13)),
+                alpha: 1
+            )
+            let title = NSColor(
+                calibratedHue: CGFloat(max(0, min(1, customHue))),
+                saturation: saturation,
+                brightness: max(0.03, min(1, baseBrightness * 0.18)),
+                alpha: 1
+            )
+            return ScheduledTaskReminderThemePalette(
+                appearance: NSAppearance(named: .darkAqua) ?? NSApp.effectiveAppearance,
+                titleBackground: title,
+                bodyBackground: body,
+                border: accent.withAlphaComponent(0.42),
+                divider: NSColor.black.withAlphaComponent(0.42),
+                primaryText: NSColor(white: 0.92, alpha: 1),
+                secondaryButton: NSColor.white.withAlphaComponent(0.22),
+                secondaryButtonHighlight: NSColor.white.withAlphaComponent(0.30),
+                secondaryButtonBorder: NSColor.white.withAlphaComponent(0.16),
+                primaryButton: accent,
+                primaryButtonHighlight: accent.blended(withFraction: 0.12, of: .white) ?? accent,
+                primaryButtonBorder: accent.blended(withFraction: 0.18, of: .white)?.withAlphaComponent(0.55) ?? accent.withAlphaComponent(0.55),
+                buttonText: .white,
+                iconChipFill: accent.withAlphaComponent(0.24),
+                iconChipStroke: accent.withAlphaComponent(0.88),
+                iconPin: accent.withAlphaComponent(0.88),
+                iconSmokeFill: NSColor.white.withAlphaComponent(0.90),
+                iconSmokeStroke: NSColor(white: 0.18, alpha: 0.78)
+            )
+        }
+
+        if isDark {
+            return ScheduledTaskReminderThemePalette(
+                appearance: NSAppearance(named: .darkAqua) ?? NSApp.effectiveAppearance,
+                titleBackground: NSColor(red: 0.23, green: 0.23, blue: 0.24, alpha: 1),
+                bodyBackground: NSColor(red: 0.18, green: 0.18, blue: 0.19, alpha: 1),
+                border: NSColor(red: 0.40, green: 0.40, blue: 0.42, alpha: 1),
+                divider: NSColor.black.withAlphaComponent(0.35),
+                primaryText: NSColor(white: 0.88, alpha: 1),
+                secondaryButton: NSColor(red: 0.40, green: 0.40, blue: 0.42, alpha: 1),
+                secondaryButtonHighlight: NSColor(red: 0.46, green: 0.46, blue: 0.48, alpha: 1),
+                secondaryButtonBorder: NSColor.white.withAlphaComponent(0.10),
+                primaryButton: NSColor(red: 0.20, green: 0.42, blue: 0.84, alpha: 1),
+                primaryButtonHighlight: NSColor(red: 0.25, green: 0.48, blue: 0.92, alpha: 1),
+                primaryButtonBorder: NSColor.white.withAlphaComponent(0.10),
+                buttonText: .white,
+                iconChipFill: NSColor(red: 0.86, green: 0.67, blue: 0.36, alpha: 1),
+                iconChipStroke: NSColor(red: 0.18, green: 0.14, blue: 0.10, alpha: 1),
+                iconPin: NSColor(red: 0.95, green: 0.72, blue: 0.31, alpha: 1),
+                iconSmokeFill: NSColor(white: 0.92, alpha: 1),
+                iconSmokeStroke: NSColor(white: 0.10, alpha: 0.78)
+            )
+        }
+
+        return ScheduledTaskReminderThemePalette(
+            appearance: NSAppearance(named: .aqua) ?? NSApp.effectiveAppearance,
+            titleBackground: NSColor(red: 0.94, green: 0.95, blue: 0.97, alpha: 1),
+            bodyBackground: NSColor(red: 0.98, green: 0.98, blue: 0.99, alpha: 1),
+            border: NSColor(red: 0.76, green: 0.78, blue: 0.82, alpha: 1),
+            divider: NSColor.black.withAlphaComponent(0.10),
+            primaryText: NSColor(red: 0.16, green: 0.17, blue: 0.20, alpha: 1),
+            secondaryButton: NSColor(red: 0.72, green: 0.74, blue: 0.78, alpha: 1),
+            secondaryButtonHighlight: NSColor(red: 0.64, green: 0.66, blue: 0.70, alpha: 1),
+            secondaryButtonBorder: NSColor.black.withAlphaComponent(0.10),
+            primaryButton: NSColor(red: 0.18, green: 0.39, blue: 0.82, alpha: 1),
+            primaryButtonHighlight: NSColor(red: 0.23, green: 0.46, blue: 0.90, alpha: 1),
+            primaryButtonBorder: NSColor.black.withAlphaComponent(0.06),
+            buttonText: .white,
+            iconChipFill: NSColor(red: 0.93, green: 0.76, blue: 0.42, alpha: 1),
+            iconChipStroke: NSColor(red: 0.18, green: 0.14, blue: 0.10, alpha: 1),
+            iconPin: NSColor(red: 0.82, green: 0.54, blue: 0.18, alpha: 1),
+            iconSmokeFill: NSColor(white: 0.97, alpha: 1),
+            iconSmokeStroke: NSColor(white: 0.14, alpha: 0.75)
+        )
     }
 }
